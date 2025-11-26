@@ -1,6 +1,9 @@
 /* kernel/mm/virtual_memory.c - stubs for virtual memory interface */
 #include <stdint.h>
 #include "virtual_memory.h"
+#ifdef HOST_TEST
+#include <stdlib.h>
+#endif
 
 /* Simple bump allocator for Phase 1 */
 static uint64_t heap_ptr = 0x10000000;
@@ -35,9 +38,15 @@ int virtual_memory_map(uint64_t vaddr, uint64_t paddr, int prot) {
 
 /* Legacy kmalloc stub */
 void *kmalloc(unsigned int size) {
+#ifdef HOST_TEST
+    /* When running host-side unit tests, fall back to malloc so pointers
+       are valid in the host process address space. */
+    return malloc(size);
+#else
     static uint64_t heap = 0x01000000; /* 16MB start */
     void *ptr = (void *)heap;
     heap += size;
     return ptr;
+#endif
 }
 

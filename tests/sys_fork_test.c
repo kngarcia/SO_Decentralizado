@@ -8,12 +8,16 @@
  */
 #include "../kernel/tasks/process.c"
 
+#include "../kernel/mm/virtual_memory.c"
+#include "../kernel/process_manager.c"
+
 /* minimal serial stubs used by syscall.c for host tests */
 #include <inttypes.h>
 void serial_puts(const char *s) { if (s) printf("%s", s); }
 void serial_putc(char c) { putchar(c); }
 void serial_put_hex(uint64_t value) { printf("%" PRIx64, value); }
 
+/* For kernel-task fallback we include only kernel tasks and syscall */
 #include "../kernel/syscall.c"
 
 int main(void) {
@@ -31,5 +35,7 @@ int main(void) {
     }
 
     printf("PASS: sys_fork returned pid=%d (proc_count=%d)\n", child, proc_count);
+
+    /* (User-clone tests are in a separate file) */
     return 0;
 }
