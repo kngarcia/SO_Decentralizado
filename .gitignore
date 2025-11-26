@@ -1,0 +1,20 @@
+cat << 'EOF' > .gitignore
+# Compilados
+*.o
+*.out
+*.a
+*.so
+*.ko
+
+# Cache
+*.log
+
+# VSCode
+.vscode/
+
+# Scripts generados
+tmp/
+
+# Backups
+*~
+EOF
