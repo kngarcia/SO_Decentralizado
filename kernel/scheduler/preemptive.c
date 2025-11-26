@@ -1,6 +1,7 @@
 /* kernel/scheduler/preemptive.c - basic preemptive scheduler for Phase1 */
 #include "preemptive.h"
 #include "../process_manager.h"
+#include "../mm/pagetable.h"
 #include "../drivers/serial.h"
 #include <stddef.h>
 #include <stdint.h>
@@ -87,6 +88,10 @@ void scheduler_start(void) {
     /* select first task if present */
     if (task_count == 0) return;
     sched_current = 0;
+    /* Switch to the next task's page table (CR3) */
+    if (tasks[sched_current] && tasks[sched_current]->page_table) {
+        pt_set_cr3((void *)tasks[sched_current]->page_table);
+    }
     pm_set_current(tasks[sched_current]);
 
     /* Jump directly into the first task by switching stack and performing an iret

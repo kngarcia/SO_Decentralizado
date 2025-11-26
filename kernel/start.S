@@ -258,6 +258,7 @@ setup_paging_64:
 
     .section .paging, "aw"
     .align 4096
+    .global pml4
     pml4: .space 4096
     pdpt: .space 4096
     pd:   .space 4096

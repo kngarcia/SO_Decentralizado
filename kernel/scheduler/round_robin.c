@@ -9,14 +9,14 @@ static task_fn tasks[MAX_TASKS];
 static int tcount = 0;
 static int current = 0;
 
-int task_create(task_fn fn) {
+int rr_task_create(task_fn fn) {
     if (tcount >= MAX_TASKS) return -1;
     tasks[tcount++] = fn;
     return tcount-1;
 }
 
 /* Very simple scheduler loop */
-void scheduler_start(void) {
+void rr_scheduler_start(void) {
     extern void show_string(const char *);
     show_string("scheduler: starting\n");
     while (1) {

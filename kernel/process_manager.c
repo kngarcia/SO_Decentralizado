@@ -12,6 +12,9 @@ uint64_t pm_register_process(process_t *proc) {
     if (proc_cnt >= PM_MAX_PROCS) return 0;
     pm_proc_table[proc_cnt] = proc;
     proc->pid = (uint64_t)(1000 + proc_cnt);
+    /* Assign default page table (kernel PML4) */
+    extern void *pt_get_kernel_pml4(void);
+    proc->page_table = pt_get_kernel_pml4();
     proc_cnt++;
     if (!current) current = proc;
     serial_puts("[pm] registered process pid=");
@@ -30,6 +33,8 @@ process_t *pm_clone_process(process_t *parent) {
     memcpy(child, parent, sizeof(process_t));
     /* assign new pid and set state to new */
     child->pid = (uint64_t)(1000 + proc_cnt);
+    /* By default copy parent's page_table pointer (shallow clone for Phase1) */
+    child->page_table = parent->page_table;
     child->state = 0; /* new */
     pm_proc_table[proc_cnt++] = child;
     serial_puts("[pm] cloned process pid=");

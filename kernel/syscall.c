@@ -4,6 +4,7 @@
  */
 
 #include "syscall.h"
+#include "process_manager.h"
 #include "drivers/serial.h"
 #include <stddef.h>
 
@@ -94,6 +95,23 @@ int sys_fork(void) {
      * Phase-1 implementation to allow basic multi-process bookkeeping
      * and to be extended later with full cloning of memory/PCB.
      */
+    /* Prefer cloning an existing user/kernel process if available via process manager */
+    extern process_t *pm_clone_process(process_t *parent);
+    extern process_t *pm_get_current(void);
+
+    process_t *cur = pm_get_current();
+    if (cur) {
+        process_t *child = pm_clone_process(cur);
+        if (!child) {
+            serial_puts("[sys_fork] pm_clone failed\n");
+            return -1;
+        }
+        /* Ensure child will see 0 as fork return value */
+        child->fork_ret = 0;
+        return (int)child->pid;
+    }
+
+    /* Fallback for kernel tasks: allocate a new process slot */
     extern int process_create(void (*entry)(void));
     int child_pid = process_create(NULL);
     if (child_pid < 0) {
