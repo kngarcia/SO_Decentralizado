@@ -145,7 +145,38 @@ _start32:
     popl %eax
 
     /* Long jump to 64-bit code */
+     /*
+      * Ensure we have a known-good GDT in place so selector $8 is valid
+      * and we won't depend on GRUB's GDT. This reduces chances of
+      * triple-faults during the 32->64 transition on uninitialized VMs.
+      */
+     /* Load a minimal GDT with: NULL, kernel-code (selector 0x08), kernel-data (selector 0x10) */
+     lgdt gdt_descriptor
+
+     /* Reload data segment registers so they're consistent with our GDT.
+         Use 0x10 (index 2) for data segment. The actual reload of CS happens
+         with the long jump below. */
+     movw $0x10, %ax
+     movw %ax, %ds
+     movw %ax, %es
+     movw %ax, %ss
+
+     /* Jump into long mode using the code selector 0x08 (index 1 << 3). */
     ljmpl $8, $_start64
+
+    .align 8
+    /* Minimal GDT table used for the 32→64 transition. We keep it tiny
+     * (NULL, kernel code, kernel data). These descriptors match the flags
+     * used later by the kernel's GDT installer. */
+    gdt_start:
+        .quad 0x0000000000000000    /* NULL descriptor */
+        .quad 0x00AF9A000000FFFF    /* kernel code: access=0x9A, gran=0xAF */
+        .quad 0x00AF92000000FFFF    /* kernel data: access=0x92, gran=0xAF */
+    gdt_end:
+
+    gdt_descriptor:
+        .word gdt_end - gdt_start - 1
+        .long gdt_start
 
     .code64
     .global _start64
