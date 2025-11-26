@@ -106,4 +106,14 @@ void show_string(const char *s) {
 /* irq_install isn't implemented yet in a separate module; provide a
     minimal stub so the kernel can initialize IRQs (replace later with
     a proper implementation). */
-void irq_install(void) { show_string("IRQ installed\n"); }
+/* Setup IRQ controller and unmask essential IRQs (timer) */
+void irq_install(void) {
+    show_string("IRQ installed\n");
+    /* Remap PIC and unmask IRQ0 (timer) so we receive timer interrupts */
+    extern void pic_remap(void);
+    extern void pic_set_mask(uint8_t mask);
+
+    pic_remap();
+    /* Unmask only IRQ0 (timer) for now */
+    pic_set_mask(0xFE); /* binary 11111110 -> only IRQ0 unmasked */
+}
