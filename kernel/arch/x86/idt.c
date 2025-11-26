@@ -56,6 +56,10 @@ void idt_install(void) {
     /* Make syscall gate DPL=3 so user-mode can invoke int 0x80 */
     idt_set_gate(0x80, (uint64_t)isr_0x80, 0x08, 0xEE, 0);
 
+    /* Register timer IRQ0 (mapped at vector 0x20 after PIC remap) */
+    extern void isr_0x20(void);
+    idt_set_gate(0x20, (uint64_t)isr_0x20, 0x08, 0x8E, 0);
+
     idt_flush((uint64_t)&idtp);
 }
 

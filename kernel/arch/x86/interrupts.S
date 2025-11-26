@@ -52,3 +52,67 @@ isr_0x80:
      popq %rbp
 
      iretq
+
+        .global isr_0x20
+isr_0x20:
+        /* Timer IRQ (IRQ0) handler for preemptive scheduler
+             Stack layout when entry comes here (CPU pushed RIP,CS,RFLAGS):
+                - [RIP]   (at higher address)
+                - [CS]
+                - [RFLAGS]
+            We push general registers so the C scheduler can save/restore them.
+        */
+        /* Save general purpose registers (order chosen so pop restores correctly) */
+        pushq %rax
+        pushq %rcx
+        pushq %rdx
+        pushq %rsi
+        pushq %rdi
+        pushq %r8
+        pushq %r9
+        pushq %r10
+        pushq %r11
+        pushq %rbx
+        pushq %rbp
+        pushq %r12
+        pushq %r13
+        pushq %r14
+        pushq %r15
+
+        /* Pass current RSP (pointer to saved regs) to C scheduler_tick
+             The scheduler will return the RSP for the next task to run in RAX.
+        */
+        mov %rsp, %rdi
+        call scheduler_tick
+
+        /* scheduler_tick returns next_rsp in RAX - use it */
+        mov %rax, %rsp
+
+        /* Restore registers (reverse of push order) */
+        popq %r15
+        popq %r14
+        popq %r13
+        popq %r12
+        popq %rbp
+        popq %rbx
+        popq %r11
+        popq %r10
+        popq %r9
+        popq %r8
+        popq %rdi
+        popq %rsi
+        popq %rdx
+        popq %rcx
+        popq %rax
+
+        iretq
+
+        .global enable_interrupts
+    enable_interrupts:
+        sti
+        retq
+
+        .global disable_interrupts
+    disable_interrupts:
+        cli
+        retq

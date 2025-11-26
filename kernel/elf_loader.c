@@ -44,7 +44,7 @@ int elf_validate(const elf64_hdr_t *hdr) {
 }
 
 /* Simple process ID allocator */
-static uint64_t next_pid = 1000;
+/* next_pid no longer used; processes are registered via process_manager */
 
 /* Load ELF binary into memory */
 process_t *elf_load(const uint8_t *binary_data, size_t size) {
@@ -67,7 +67,7 @@ process_t *elf_load(const uint8_t *binary_data, size_t size) {
     if (!proc) return NULL;
     
     memset(proc, 0, sizeof(process_t));
-    proc->pid = next_pid++;
+    proc->pid = 0; /* will be set by process manager on registration */
     proc->entry_point = elf_hdr->e_entry;
     proc->state = 0; /* new */
     
@@ -116,6 +116,15 @@ process_t *elf_load(const uint8_t *binary_data, size_t size) {
     /* Setup initial stack */
     proc->stack_top = 0x20000000 - 0x1000;  /* Arbitrary top, growing down */
     
+    /* register process with process manager (takes ownership) */
+    extern uint64_t pm_register_process(process_t *proc);
+    /* Create a per-process page table by cloning current kernel PML4 */
+    extern void *pt_clone_current(void);
+    void *pml4 = pt_clone_current();
+    proc->page_table = (uint64_t *)pml4;
+
+    pm_register_process(proc);
+
     serial_puts("[elf] Process loaded: pid=");
     serial_put_hex(proc->pid);
     serial_puts(" entry=0x");
@@ -169,6 +178,12 @@ int elf_exec(process_t *proc, char **argv, char **envp) {
      * Sequence of pushes: push SS; push RSP; pushfq; push CS; push RIP; iretq
      */
     uint64_t rip = proc->entry_point;
+
+    /* Switch to the process's page table before entering user-mode */
+    extern void pt_set_cr3(void *p);
+    if (proc->page_table) {
+        pt_set_cr3((void *)proc->page_table);
+    }
 
     asm volatile(
         "pushq %%rax\n\t"              /* scratch: push old rax to preserve */

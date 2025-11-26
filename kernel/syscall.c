@@ -4,6 +4,7 @@
  */
 
 #include "syscall.h"
+#include "process_manager.h"
 #include "drivers/serial.h"
 #include <stddef.h>
 
@@ -89,11 +90,44 @@ void *sys_mmap(uint64_t addr, uint64_t size, int prot) {
 }
 
 int sys_fork(void) {
-    /* Clone current process
-     * TODO: Implement process cloning with new PCB + page tables
+    /* Minimal prototype for fork: allocate a new process slot using
+     * process_create() and return the child PID. This is a temporary
+     * Phase-1 implementation to allow basic multi-process bookkeeping
+     * and to be extended later with full cloning of memory/PCB.
      */
-    serial_puts("[sys_fork] called (not implemented)\n");
-    return -1;
+    /* Prefer cloning an existing user/kernel process if available via process manager */
+    extern process_t *pm_clone_process(process_t *parent);
+    extern process_t *pm_get_current(void);
+
+    process_t *cur = pm_get_current();
+    if (cur) {
+        process_t *child = pm_clone_process(cur);
+        if (!child) {
+            serial_puts("[sys_fork] pm_clone failed\n");
+            return -1;
+        }
+        /* Ensure child will see 0 as fork return value */
+        child->fork_ret = 0;
+        return (int)child->pid;
+    }
+
+    /* Fallback for kernel tasks: allocate a new process slot */
+    extern int process_create(void (*entry)(void));
+    int child_pid = process_create(NULL);
+    if (child_pid < 0) {
+        serial_puts("[sys_fork] failed: no free process slots\n");
+        return -1;
+    }
+
+    serial_puts("[sys_fork] created pid ");
+    serial_put_hex((uint64_t)child_pid);
+    serial_putc('\n');
+
+    /* Return child's PID to the caller (parent). A real fork would
+     * return 0 in the child context but that requires scheduler support
+     * and a full process context switch. We'll keep this simple for Phase 1.
+     */
+    return child_pid;
 }
 
 int sys_exec(const char *path, char **argv) {

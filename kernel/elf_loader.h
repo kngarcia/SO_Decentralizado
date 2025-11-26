@@ -71,6 +71,7 @@ typedef struct {
     uint64_t stack_top;
     uint64_t *page_table;      /* Per-process page table */
     int      state;            /* 0=new, 1=running, 2=sleeping, 3=dead */
+    int      fork_ret;         /* if non-zero, indicates value to return from fork in child */
 } process_t;
 
 /* Validate ELF header */
