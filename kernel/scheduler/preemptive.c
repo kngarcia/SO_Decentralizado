@@ -61,6 +61,8 @@ int task_create(void (*entry)(void)) {
 
     uint64_t *frame = prepare_initial_frame((void*)stktop, (uint64_t)entry);
     proc->stack_top = (uint64_t)frame; /* initial RSP for context */
+    proc->stack_base = (uint64_t)stk;
+    proc->stack_size = KERNEL_STACK_SIZE;
     proc->state = 0;
 
     pm_register_process(proc);
@@ -114,7 +116,8 @@ void scheduler_start(void) {
 uint64_t scheduler_tick(uint64_t *saved_regs_ptr) {
     /* Save current task rip */
     /* Advance current index round-robin */
-    if (sched_current >= 0 && sched_current < task_count) {
+    if (sched_current >= 0 && sched_current < task_count && saved_regs_ptr) {
+        /* Save current task's RSP (pointer to saved registers) */
         tasks[sched_current]->stack_top = (uint64_t)saved_regs_ptr;
     }
 

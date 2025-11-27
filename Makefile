@@ -18,6 +18,14 @@ iso: all
 run: iso
 	qemu-system-x86_64 -cdrom myos.iso -m 256M -boot d
 
+test-qemu-elf-demo: iso
+	@echo "Running QEMU test for embedded user ELF (see tests/qemu_elf_demo_test.sh)"
+	bash tests/qemu_elf_demo_test.sh
+
+test-qemu-fork-demo:
+	@echo "Running QEMU fork demo test (build kernel with RUN_FORK_DEMO)"
+	bash tests/qemu_fork_demo_test.sh
+
 clean:
 	$(MAKE) -C kernel clean
 	rm -rf isodir myos.iso

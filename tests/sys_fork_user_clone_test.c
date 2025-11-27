@@ -24,7 +24,22 @@ int main(void) {
     }
     memset(p, 0, sizeof(process_t));
     p->entry_point = 0x1000;
-    p->stack_top = 0x8000;
+    /* allocate a real stack in host tests via kmalloc and set top
+       to near the end of the allocated region so saved-regs pointers
+       align with scheduler expectations */
+    const uint64_t STKSZ = 0x1000;
+    p->stack_base = (uint64_t)kmalloc(STKSZ);
+    if (!p->stack_base) {
+        printf("ERROR: kmalloc for stack failed\n");
+        return 1;
+    }
+    p->stack_size = STKSZ;
+    /* Push the saved register frame near the top of the stack (matching REG_COUNT + 3 reserved words) */
+    const int REG_COUNT = 15;
+    p->stack_top = p->stack_base + STKSZ - (REG_COUNT + 3) * sizeof(uint64_t);
+    /* set a non-zero RAX in parent saved slot so we can detect child override */
+    uint64_t *parent_saved = (uint64_t *)p->stack_top;
+    parent_saved[REG_COUNT - 1] = 0xDEADBEEFULL;
 
     uint64_t pid_before = pm_register_process(p);
     if (pm_count() < 1) {
@@ -34,7 +49,14 @@ int main(void) {
 
     pm_set_current(p);
 
-    int child = sys_fork();
+    /* Call pm_clone_process directly to get a child pointer we can inspect */
+    extern process_t *pm_clone_process(process_t *parent);
+    process_t *child_proc = pm_clone_process(p);
+    if (!child_proc) {
+        printf("ERROR: pm_clone_process failed\n");
+        return 1;
+    }
+    int child = (int)child_proc->pid;
     if (child < 0) {
         printf("ERROR: sys_fork clone failed and returned %d\n", child);
         return 1;
@@ -43,6 +65,16 @@ int main(void) {
     if (pm_count() <= 1) {
         printf("ERROR: pm_clone didn't increase process table (count=%d)\n", pm_count());
         return 1;
+    }
+
+    /* Validate child saved register state: ensure returned RAX will be 0 */
+    if (child_proc->stack_top) {
+        uint64_t *saved = (uint64_t *)child_proc->stack_top;
+        const int REG_COUNT = 15;
+        if (saved[REG_COUNT - 1] != 0) {
+            printf("ERROR: child saved RAX not zero (0x%llx)\n", (unsigned long long)saved[REG_COUNT - 1]);
+            return 1;
+        }
     }
 
     printf("PASS: sys_fork cloned process -> child pid=%d (total pm_count=%d)\n", child, pm_count());

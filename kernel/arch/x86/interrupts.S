@@ -107,6 +107,54 @@ isr_0x20:
 
         iretq
 
+        .global isr_0x0e
+    isr_0x0e:
+            /* Page Fault handler: push general registers then call C handler
+               We pass pointer to saved registers in RDI and CR2 (fault address) in RSI
+            */
+            pushq %rax
+            pushq %rcx
+            pushq %rdx
+            pushq %rsi
+            pushq %rdi
+            pushq %r8
+            pushq %r9
+            pushq %r10
+            pushq %r11
+            pushq %rbx
+            pushq %rbp
+            pushq %r12
+            pushq %r13
+            pushq %r14
+            pushq %r15
+
+            /* Pass parameters: rdi = saved regs ptr (rsp), rsi = CR2 (fault addr) */
+            mov %rsp, %rdi
+            mov %cr2, %rsi
+            call page_fault_handler
+
+            /* page_fault_handler returns next_rsp in RAX; set RSP to it */
+            mov %rax, %rsp
+
+            /* Restore registers (reverse of push order) */
+            popq %r15
+            popq %r14
+            popq %r13
+            popq %r12
+            popq %rbp
+            popq %rbx
+            popq %r11
+            popq %r10
+            popq %r9
+            popq %r8
+            popq %rdi
+            popq %rsi
+            popq %rdx
+            popq %rcx
+            popq %rax
+
+            iretq
+
         .global enable_interrupts
     enable_interrupts:
         sti

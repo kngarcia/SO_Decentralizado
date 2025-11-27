@@ -4,6 +4,7 @@
  */
 
 #include "elf_loader.h"
+#include "mm/pagetable.h"
 #include "drivers/serial.h"
 #include "mm/virtual_memory.h"
 
@@ -119,8 +120,8 @@ process_t *elf_load(const uint8_t *binary_data, size_t size) {
     /* register process with process manager (takes ownership) */
     extern uint64_t pm_register_process(process_t *proc);
     /* Create a per-process page table by cloning current kernel PML4 */
-    extern void *pt_clone_current(void);
-    void *pml4 = pt_clone_current();
+    extern void *pt_clone_for_cow(void *parent_pml4);
+    void *pml4 = pt_clone_for_cow(pt_get_kernel_pml4());
     proc->page_table = (uint64_t *)pml4;
 
     pm_register_process(proc);
