@@ -69,9 +69,13 @@ typedef struct {
     uint64_t heap_start;
     uint64_t heap_end;
     uint64_t stack_top;
+    uint64_t stack_base;      /* base address of stack (low address) */
+    uint64_t stack_size;      /* size of allocated stack */
     uint64_t *page_table;      /* Per-process page table */
+    int      fds[16];          /* Simple per-process file descriptor table */
     int      state;            /* 0=new, 1=running, 2=sleeping, 3=dead */
     int      fork_ret;         /* if non-zero, indicates value to return from fork in child */
+    int      exit_code;        /* exit status for process */
 } process_t;
 
 /* Validate ELF header */

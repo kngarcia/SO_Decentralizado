@@ -60,6 +60,10 @@ void idt_install(void) {
     extern void isr_0x20(void);
     idt_set_gate(0x20, (uint64_t)isr_0x20, 0x08, 0x8E, 0);
 
+    /* Register page fault handler (vector 0x0E) */
+    extern void isr_0x0e(void);
+    idt_set_gate(0x0e, (uint64_t)isr_0x0e, 0x08, 0x8E, 0);
+
     idt_flush((uint64_t)&idtp);
 }
 

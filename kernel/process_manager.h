@@ -18,5 +18,7 @@ process_t *pm_clone_process(process_t *parent);
 process_t *pm_get_current(void);
 void pm_set_current(process_t *p);
 int pm_count(void);
+/* Return pointer to process by pid, or NULL */
+process_t *pm_find_by_pid(uint64_t pid);
 
 #endif

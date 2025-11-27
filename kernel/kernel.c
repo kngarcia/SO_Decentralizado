@@ -37,11 +37,19 @@ void kmain(uint32_t mbi_ptr) {
     /* enable paging (identity paging minimal) */
     paging_enable();
     
+    /* Setup simple FS and syscall interface (Phase 1) */
+    extern void fs_init(void);
+    fs_init();
     /* Setup syscall interface (Phase 1) */
     syscall_install();
     show_string("[kmain] Syscall interface installed\n");
     /* Demo: load and execute embedded user ELF (phase 1 test) */
+#ifdef RUN_FORK_DEMO
+    extern void elf_loader_fork_demo(void);
+    elf_loader_fork_demo();
+#else
     elf_loader_demo();
+#endif
 
     /* Demo: Test IPC + Scheduler (still functional in 64-bit) */
     extern int task_create(void (*)(void));

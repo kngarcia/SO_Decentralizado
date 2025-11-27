@@ -8,4 +8,10 @@ void *pt_clone_current(void);
 void pt_set_cr3(void *p);
 void *pt_get_kernel_pml4(void);
 
+/* Helpers for page-table walk (return pointer to PTE for vaddr in the given PML4 base, or NULL) */
+uint64_t *pt_find_pte_for_vaddr(void *pml4_base, uint64_t vaddr);
+
+/* Clone PML4 for fork with Copy-On-Write semantics: returns new PML4 pointer */
+void *pt_clone_for_cow(void *parent_pml4);
+
 #endif

@@ -5,7 +5,7 @@ ASMS := start.S arch/x86/interrupts.S
 OBJS := $(CSRC:.c=.o) $(ASMS:.S=.o)
 
 # x86-64 compilation flags
-CFLAGS := -m64 -ffreestanding -O2 -Wall -Wextra -fno-asynchronous-unwind-tables
+CFLAGS := -m64 -ffreestanding -O2 -Wall -Wextra -fno-asynchronous-unwind-tables -fno-stack-protector
 ASFLAGS := -m64
 
 all: kernel.bin
