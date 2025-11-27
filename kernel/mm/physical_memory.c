@@ -1,5 +1,6 @@
 /* kernel/mm/physical_memory.c - simple physical memory bitmap (stub) */
 #include <stdint.h>
+#include <string.h>
 #define FRAME_SIZE 4096
 #define MAX_FRAMES 32768  /* 128MB / 4KB */
 
@@ -12,6 +13,20 @@ static uint16_t frame_refcount[MAX_FRAMES];
 static inline void set_frame(uint32_t frame) { frame_bitmap[frame/8] |= (1 << (frame%8)); }
 static inline void clear_frame(uint32_t frame) { frame_bitmap[frame/8] &= ~(1 << (frame%8)); }
 static inline int test_frame(uint32_t frame) { return frame_bitmap[frame/8] & (1 << (frame%8)); }
+
+/* Initialize physical memory allocator: mark first 0x2000000 (32MB) as reserved
+   for kernel/early alloc, rest as free. Called once at boot. */
+void physical_memory_init(void) {
+    extern void serial_puts(const char *);
+    serial_puts("[phys_mem] init start\n");
+    /* Don't zero everything - BSS is already zero-initialized.
+       Just reserve first 32MB (frames 0..8191) for kernel + early structures */
+    for (uint32_t i = 0; i < 8192 && i < MAX_FRAMES; i++) {
+        set_frame(i);
+        frame_refcount[i] = 1; /* mark as used */
+    }
+    serial_puts("[phys_mem] init complete\n");
+}
 
 uint32_t first_free_frame(void) {
     for (uint32_t i=0;i<MAX_FRAMES;i++) if (!test_frame(i)) return i;

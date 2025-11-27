@@ -12,9 +12,11 @@ uint64_t pm_register_process(process_t *proc) {
     if (proc_cnt >= PM_MAX_PROCS) return 0;
     pm_proc_table[proc_cnt] = proc;
     proc->pid = (uint64_t)(1000 + proc_cnt);
-    /* Assign default page table (kernel PML4) */
-    extern void *pt_get_kernel_pml4(void);
-    proc->page_table = pt_get_kernel_pml4();
+     /* Assign default page table (kernel PML4) only when not already assigned
+         (elf_load or callers may provide a per-process page table before
+         registering the process). */
+     extern void *pt_get_kernel_pml4(void);
+     if (!proc->page_table) proc->page_table = pt_get_kernel_pml4();
     proc_cnt++;
     /* Initialize FDs to -1 to indicate unused */
     for (int i = 0; i < 16; ++i) proc->fds[i] = -1;

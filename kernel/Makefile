@@ -1,5 +1,6 @@
 # kernel/Makefile - build kernel ELF 64-bit
 # Booteable on any UEFI/BIOS system (VM, physical hardware, cloud)
+
 CSRC := $(shell find . -name '*.c')
 ASMS := start.S arch/x86/interrupts.S
 OBJS := $(CSRC:.c=.o) $(ASMS:.S=.o)

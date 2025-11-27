@@ -37,12 +37,29 @@ void kmain(uint32_t mbi_ptr) {
     /* enable paging (identity paging minimal) */
     paging_enable();
     
+    /* Initialize physical memory allocator */
+    extern void physical_memory_init(void);
+    physical_memory_init();
+    
     /* Setup simple FS and syscall interface (Phase 1) */
     extern void fs_init(void);
     fs_init();
+    
+    /* Initialize WASM3 runtime (Phase 2) - BEFORE syscall to test */
+    show_string("[kmain] Step 1: About to call wasm_init\n");
+    extern void wasm_init(void);
+    volatile int wasm_initialized = 0;
+    wasm_init();
+    wasm_initialized = 1;
+    show_string("[kmain] Step 2: wasm_init returned\n");
+    if (wasm_initialized) {
+        show_string("[kmain] WASM3 runtime initialized successfully\n");
+    }
+    
     /* Setup syscall interface (Phase 1) */
     syscall_install();
     show_string("[kmain] Syscall interface installed\n");
+    
     /* Demo: load and execute embedded user ELF (phase 1 test) */
 #ifdef RUN_FORK_DEMO
     extern void elf_loader_fork_demo(void);

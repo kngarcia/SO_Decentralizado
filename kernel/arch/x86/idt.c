@@ -64,6 +64,14 @@ void idt_install(void) {
     extern void isr_0x0e(void);
     idt_set_gate(0x0e, (uint64_t)isr_0x0e, 0x08, 0x8E, 0);
 
+    /* Register general protection fault handler (vector 0x0D) */
+    extern void isr_0x0d(void);
+    idt_set_gate(0x0d, (uint64_t)isr_0x0d, 0x08, 0x8E, 0);
+
+    /* Register double fault handler (vector 0x08) */
+    extern void isr_0x08(void);
+    idt_set_gate(0x08, (uint64_t)isr_0x08, 0x08, 0x8E, 0); /* No IST for now */
+
     idt_flush((uint64_t)&idtp);
 }
 

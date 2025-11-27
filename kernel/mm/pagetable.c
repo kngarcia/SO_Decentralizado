@@ -206,4 +206,106 @@ void pt_set_cr3(void *p) {
     asm volatile ("mov %0, %%cr3" :: "r"(p));
 }
 
+/* Map a virtual range into the given PML4 with newly allocated frames.
+ * Allocates page table structures as needed. Flags: bit0=present, bit1=writable, bit2=user.
+ * Returns 0 on success, -1 on failure.
+ */
+int pt_map_range(void *pml4_base, uint64_t vaddr, uint64_t size, uint64_t flags) {
+    if (!pml4_base) return -1;
+    uint64_t *pml4 = (uint64_t *)pml4_base;
+    
+    /* Round up size to 4KB pages */
+    uint64_t num_pages = (size + 4095) / 4096;
+    uint64_t current_vaddr = vaddr & ~0xFFFULL; /* align down */
+    
+    for (uint64_t i = 0; i < num_pages; ++i) {
+        uint64_t va = current_vaddr + (i * 4096);
+        
+        /* Extract indices */
+        uint64_t pml4_idx = (va >> 39) & 0x1FFULL;
+        uint64_t pdpt_idx = (va >> 30) & 0x1FFULL;
+        uint64_t pd_idx = (va >> 21) & 0x1FFULL;
+        uint64_t pt_idx = (va >> 12) & 0x1FFULL;
+        
+        /* Allocate PDPT if needed */
+        if (!(pml4[pml4_idx] & 1)) {
+            void *pdpt = kmalloc(4096);
+            if (!pdpt) return -1;
+            memset(pdpt, 0, 4096);
+            pml4[pml4_idx] = (uint64_t)pdpt | flags | 1; /* present + flags */
+        }
+        uint64_t *pdpt = (uint64_t *)(pml4[pml4_idx] & ~0xFFFULL);
+        
+        /* Allocate PD if needed */
+        if (!(pdpt[pdpt_idx] & 1)) {
+            void *pd = kmalloc(4096);
+            if (!pd) return -1;
+            memset(pd, 0, 4096);
+            pdpt[pdpt_idx] = (uint64_t)pd | flags | 1;
+        }
+        uint64_t *pd = (uint64_t *)(pdpt[pdpt_idx] & ~0xFFFULL);
+        
+        /* Allocate PT if needed */
+        if (!(pd[pd_idx] & 1)) {
+            void *pt = kmalloc(4096);
+            if (!pt) return -1;
+            memset(pt, 0, 4096);
+            pd[pd_idx] = (uint64_t)pt | flags | 1;
+        }
+        uint64_t *pt = (uint64_t *)(pd[pd_idx] & ~0xFFFULL);
+        
+        /* Allocate physical frame if PTE not present */
+        if (!(pt[pt_idx] & 1)) {
+            void *frame = kmalloc(4096);
+            if (!frame) return -1;
+            memset(frame, 0, 4096);
+            pt[pt_idx] = (uint64_t)frame | flags | 1;
+        }
+    }
+    
+    return 0;
+}
+
+/* Mark all page table structures leading to vaddr as user-accessible (bit 2) */
+void pt_mark_user_recursive(void *pml4_base, uint64_t vaddr) {
+    if (!pml4_base) return;
+    uint64_t *pml4 = (uint64_t *)pml4_base;
+    
+    uint64_t pml4_idx = (vaddr >> 39) & 0x1FFULL;
+    uint64_t pdpt_idx = (vaddr >> 30) & 0x1FFULL;
+    uint64_t pd_idx = (vaddr >> 21) & 0x1FFULL;
+    uint64_t pt_idx = (vaddr >> 12) & 0x1FFULL;
+    
+    if (!(pml4[pml4_idx] & 1)) return; /* not present */
+    pml4[pml4_idx] |= 0x4; /* set user bit */
+    uint64_t *pdpt = (uint64_t *)(pml4[pml4_idx] & ~0xFFFULL);
+    
+    if (!(pdpt[pdpt_idx] & 1)) return; /* not present */
+    pdpt[pdpt_idx] |= 0x4;
+    
+    /* Check if this is a 1GB page */
+    if (pdpt[pdpt_idx] & (1ULL<<7)) {
+        /* 1GB page - no further levels */
+        return;
+    }
+    
+    uint64_t *pd = (uint64_t *)(pdpt[pdpt_idx] & ~0xFFFULL);
+    
+    if (!(pd[pd_idx] & 1)) return; /* not present */
+    pd[pd_idx] |= 0x4;
+    
+    /* Check if this is a 2MB page */
+    if (pd[pd_idx] & (1ULL<<7)) {
+        /* 2MB page - no PT level, we're done */
+        return;
+    }
+    
+    /* Only access PT if we have 4KB pages */
+    uint64_t *pt = (uint64_t *)(pd[pd_idx] & ~0xFFFULL);
+    
+    if (pt[pt_idx] & 1) {
+        pt[pt_idx] |= 0x4;
+    }
+}
+
 #endif

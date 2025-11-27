@@ -19,7 +19,7 @@ if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
 fi
 
 # Run QEMU for a short time and capture serial output to file
-timeout 8s qemu-system-x86_64 -cdrom myos.iso -m 512M -serial file:$SERIAL_LOG >/dev/null 2>&1 || true
+timeout 8s qemu-system-x86_64 -cdrom myos.iso -m 512M -serial file:$SERIAL_LOG -display none >/dev/null 2>&1 || true
 
 echo "QEMU finished; scanning logs for user message..."
 if grep -q "Hello from ring-3" "$SERIAL_LOG"; then
@@ -27,7 +27,7 @@ if grep -q "Hello from ring-3" "$SERIAL_LOG"; then
   exit 0
 else
   echo "FAIL: user hello not found in serial output"
-  printf "--- serial output (last 200 lines) ---\n"
+  printf "serial output (last 200 lines)\n"
   tail -n 200 "$SERIAL_LOG" || true
   exit 1
 fi

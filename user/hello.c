@@ -21,7 +21,7 @@ static inline long user_syscall(long num, long a1, long a2, long a3) {
 }
 
 void _start(void) {
-    const char msg[] = "[user] Hello from ring-3!\n";
+    const char msg[] = "Hello from ring-3!\n";
     user_syscall(SYS_LOG, (long)msg, 0, 0);
     user_syscall(SYS_EXIT, 0, 0, 0);
     for (;;) ;

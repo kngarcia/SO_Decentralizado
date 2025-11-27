@@ -11,8 +11,8 @@
 
 /* Embedded builtin binaries are referenced via extern to avoid multiple
     definition when headers get included in multiple compilation units. */
-extern unsigned char build_user_hello_elf[];
-extern unsigned int build_user_hello_elf_len;
+extern unsigned char build_user_hello_nocet_elf[];
+extern unsigned int build_user_hello_nocet_elf_len;
 #include <stddef.h>
 
 /* Syscall handler entry point
@@ -28,6 +28,12 @@ void syscall_install(void) {
 
 /* Dispatcher - routes syscall number to handler */
 syscall_result_t syscall_dispatch(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3) {
+    /* Debug: log incoming syscall numbers for tracing */
+    serial_puts("[syscall] num=");
+    serial_put_hex(num);
+    serial_puts(" arg1=0x");
+    serial_put_hex(arg1);
+    serial_putc('\n');
     switch (num) {
         case SYS_EXIT:
             sys_exit((int)arg1);
@@ -53,6 +59,10 @@ syscall_result_t syscall_dispatch(uint64_t num, uint64_t arg1, uint64_t arg2, ui
             return sys_open((const char *)arg1, (int)arg2);
         case SYS_CLOSE:
             return sys_close((int)arg1);
+        case SYS_WASM_LOAD:
+            return sys_wasm_load((const void *)arg1, arg2, (const char *)arg3);
+        case SYS_WASM_EXEC:
+            return sys_wasm_exec((int)arg1, (const char *)arg2);
         default:
             return -1; /* EINVAL */
     }
@@ -153,7 +163,7 @@ int sys_exec(const char *path, char **argv) {
      * This is a Phase1 convenience implementation (no filesystem yet).
      */
     if (!path || strcmp(path, "/hello") == 0 || strcmp(path, "hello") == 0) {
-        process_t *proc = elf_load(build_user_hello_elf, build_user_hello_elf_len);
+        process_t *proc = elf_load(build_user_hello_nocet_elf, build_user_hello_nocet_elf_len);
         if (!proc) {
             serial_puts("[sys_exec] elf_load failed\n");
             return -1;
@@ -221,6 +231,62 @@ int sys_open(const char *path, int flags) {
 int sys_close(int fd) {
     extern void fs_decref(int fd);
     fs_decref(fd);
-    serial_puts("[sys_close] closed fd="); serial_put_hex(fd); serial_putc('\n');
+    serial_puts("[sys_close] fd="); serial_put_hex(fd); serial_putc('\n');
     return 0;
+}
+
+/* ============================================================
+ * WASM3 Syscall Implementations
+ * ============================================================
+ */
+#include "wasm/wasm_wrapper.h"
+
+int sys_wasm_load(const void *wasm_bytes, uint64_t len, const char *module_name) {
+    serial_puts("[sys_wasm_load] Loading WASM module: ");
+    serial_puts(module_name ? module_name : "(unnamed)");
+    serial_putc('\n');
+    
+    if (!wasm_bytes || len == 0) {
+        serial_puts("[sys_wasm_load] ERROR: Invalid WASM bytes\n");
+        return -1;
+    }
+    
+    int module_id = wasm_load_module((const uint8_t *)wasm_bytes, (size_t)len, module_name ? module_name : "module");
+    if (module_id < 0) {
+        serial_puts("[sys_wasm_load] ERROR: ");
+        serial_puts(wasm_get_last_error());
+        serial_putc('\n');
+        return -1;
+    }
+    
+    serial_puts("[sys_wasm_load] SUCCESS: module_id=");
+    serial_put_hex(module_id);
+    serial_putc('\n');
+    return module_id;
+}
+
+int sys_wasm_exec(int module_id, const char *func_name) {
+    serial_puts("[sys_wasm_exec] Executing ");
+    serial_puts(func_name ? func_name : "(null)");
+    serial_puts(" in module ");
+    serial_put_hex(module_id);
+    serial_putc('\n');
+    
+    if (!func_name) {
+        serial_puts("[sys_wasm_exec] ERROR: func_name is NULL\n");
+        return -1;
+    }
+    
+    int result = wasm_exec_function(module_id, func_name, 0, NULL);
+    if (result < 0) {
+        serial_puts("[sys_wasm_exec] ERROR: ");
+        serial_puts(wasm_get_last_error());
+        serial_putc('\n');
+        return -1;
+    }
+    
+    serial_puts("[sys_wasm_exec] SUCCESS: result=");
+    serial_put_hex(result);
+    serial_putc('\n');
+    return result;
 }

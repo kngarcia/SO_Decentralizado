@@ -153,6 +153,29 @@ int virtual_memory_refcount(uint64_t vaddr) {
     return r->refcount;
 }
 
+void general_protection_handler(uint64_t *saved_regs_ptr) {
+    serial_puts("[GP] General Protection Fault!\n");
+    serial_puts("[GP] saved_regs_ptr=0x"); serial_put_hex((uint64_t)saved_regs_ptr); serial_putc('\n');
+    
+    /* The error code is pushed before the interrupt frame by the CPU */
+    /* Stack layout: ... regs ... error_code RIP CS RFLAGS RSP SS */
+    /* saved_regs_ptr points to the first pushed register (R15 in our case) */
+    /* Error code is at saved_regs_ptr[15] (after 15 pushed registers) */
+    uint64_t error_code = saved_regs_ptr[15];
+    serial_puts("[GP] error_code=0x"); serial_put_hex(error_code); serial_putc('\n');
+    
+    /* Dump stack */
+    serial_puts("[GP] stack dump:\n");
+    for (int i = 0; i < 25; i++) {
+        serial_put_hex(saved_regs_ptr[i]);
+        serial_putc(' ');
+        if ((i+1) % 5 == 0) serial_putc('\n');
+    }
+    
+    serial_puts("[GP] Halting...\n");
+    for(;;) asm volatile("hlt");
+}
+
 uint64_t page_fault_handler(uint64_t *saved_regs_ptr, uint64_t fault_addr) {
     (void)saved_regs_ptr;
     serial_puts("[pf] page fault at 0x");
@@ -191,12 +214,53 @@ uint64_t page_fault_handler(uint64_t *saved_regs_ptr, uint64_t fault_addr) {
     }
 
     uint64_t pte = *pte_ptr;
+    /* debug: print pte contents to help diagnose faults */
+    /* try to read CPU-provided error-code (pushed before our register pushes)
+       we pushed 15 registers in the ISR wrapper, so error code should be
+       located at saved_regs_ptr[15] */
+    uint64_t errcode = 0;
+    if (saved_regs_ptr) {
+        /* Dump stack words around saved_regs_ptr (helpful to locate CPU-pushed RIP/CS/RFLAGS/ERRCODE)
+           saved_regs_ptr points to the current RSP at C handler entry (after our pushes).
+           We'll print a small window of words before and after this pointer. */
+        serial_puts("[pf] saved_regs_ptr=0x"); serial_put_hex((uint64_t)(uintptr_t)saved_regs_ptr); serial_putc('\n');
+        serial_puts("[pf] stack dump (words @ saved_regs_ptr-4 .. +20):\n");
+        for (int i = -4; i < 21; ++i) {
+            uint64_t val = 0;
+            /* Avoid invalid pointer arithmetic in some builds */
+            val = saved_regs_ptr[i];
+            serial_put_hex((uint64_t)val);
+            serial_putc(' ');
+            if ((i + 5) % 8 == 0) serial_putc('\n');
+        }
+        serial_putc('\n');
+
+        /* Try to find an error code nearby (scan local window for small values that look like error codes) */
+        for (int i = -4; i < 21; ++i) {
+            uint64_t v = saved_regs_ptr[i];
+            if (v <= 0xFFF) { /* likely an errcode */
+                errcode = v;
+                serial_puts("[pf] guessed errcode=0x"); serial_put_hex(errcode); serial_putc('\n');
+                break;
+            }
+        }
+    }
+    serial_puts("[pf] pte=0x"); serial_put_hex(pte); serial_putc('\n');
     if (!(pte & 1)) {
         serial_puts("[pf] pte not present -> killing\n");
         extern process_t *pm_get_current(void);
         process_t *cur = pm_get_current();
         if (cur) { cur->state = 3; cur->exit_code = -1; }
         for(;;) asm volatile("hlt");
+    }
+
+    /* If U/S (user) bit not set, this may be a user-mode access - set and continue */
+    if (!(pte & 0x4)) {
+        serial_puts("[pf] PTE missing U/S bit -> setting user bit and continuing\n");
+        *pte_ptr = pte | 0x4ULL; /* mark as user-accessible */
+        /* invalidate TLB for this address so the CPU sees the updated PTE */
+        asm volatile("invlpg (%0)" :: "r"(fault_addr) : "memory");
+        return (uint64_t)saved_regs_ptr;
     }
 
     /* if writable - not a write fault COW, escalate */
@@ -213,6 +277,7 @@ uint64_t page_fault_handler(uint64_t *saved_regs_ptr, uint64_t fault_addr) {
     if (refc <= 1) {
         serial_puts("[pf] frame refcount<=1 -> make writable and continue\n");
         *pte_ptr = pte | 0x2; /* make writable */
+        asm volatile("invlpg (%0)" :: "r"(fault_addr) : "memory");
         return (uint64_t)saved_regs_ptr;
     }
 

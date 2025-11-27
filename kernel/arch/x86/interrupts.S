@@ -25,31 +25,46 @@ idt_flush:
 isr_0x80:
      /* Syscall software interrupt handler (vector 0x80)
          Calling convention: user places syscall number in RDI,
-         args in RSI, RDX, RCX. We preserve callee-saved registers
-         and call C dispatcher syscall_dispatch(num, arg1, arg2, arg3).
+         args in RSI, RDX, RCX. We preserve ALL registers except RAX (return value).
      */
-     /* Save callee-saved registers */
-     pushq %rbp
+
+    /* Save ALL caller-saved and callee-saved registers except RAX (will be overwritten by return) */
+     pushq %rcx
+     pushq %rdx
+     pushq %rsi
+     pushq %rdi
+     pushq %r8
+     pushq %r9
+     pushq %r10
+     pushq %r11
      pushq %rbx
+     pushq %rbp
      pushq %r12
      pushq %r13
      pushq %r14
      pushq %r15
 
-     /* Ensure stack 16-byte alignment before call (interrupt entry may be aligned)
-         Call syscall_dispatch directly; user-provided args are already in RDI, RSI, RDX, RCX.
-     */
+     /* Syscall args: RDI=num, RSI=arg1, RDX=arg2, RCX=arg3
+        They're still in registers from user, so pass them directly */
      call syscall_dispatch
 
-     /* Result is in RAX (returned to user). Restore callee-saved registers (do not clobber RAX)
-         We must restore in reverse order. Note: we didn't save RAX so it contains result.
+     /* Result is in RAX (returned to user). Restore all registers in reverse order.
+        Do NOT restore RAX - it contains the syscall return value.
      */
      popq %r15
      popq %r14
      popq %r13
      popq %r12
-     popq %rbx
      popq %rbp
+     popq %rbx
+     popq %r11
+     popq %r10
+     popq %r9
+     popq %r8
+     popq %rdi
+     popq %rsi
+     popq %rdx
+     popq %rcx
 
      iretq
 
@@ -155,6 +170,69 @@ isr_0x20:
 
             iretq
 
+        .global isr_0x08
+    isr_0x08:
+            /* Double Fault - print marker and halt */
+            push %rax
+            push %rdx
+            mov $0x3F8, %dx
+            mov $'[', %al
+            outb %al, %dx
+            mov $'D', %al
+            outb %al, %dx
+            mov $'F', %al
+            outb %al, %dx
+            mov $']', %al
+            outb %al, %dx
+            mov $'\n', %al
+            outb %al, %dx
+            pop %rdx
+            pop %rax
+1:          hlt
+            jmp 1b
+
+        .global isr_0x0d
+    isr_0x0d:
+            /* General Protection Fault handler */
+            pushq %rax
+            pushq %rcx
+            pushq %rdx
+            pushq %rsi
+            pushq %rdi
+            pushq %r8
+            pushq %r9
+            pushq %r10
+            pushq %r11
+            pushq %rbx
+            pushq %rbp
+            pushq %r12
+            pushq %r13
+            pushq %r14
+            pushq %r15
+
+            /* Pass saved regs ptr in RDI */
+            mov %rsp, %rdi
+            call general_protection_handler
+
+            /* Restore registers */
+            popq %r15
+            popq %r14
+            popq %r13
+            popq %r12
+            popq %rbp
+            popq %rbx
+            popq %r11
+            popq %r10
+            popq %r9
+            popq %r8
+            popq %rdi
+            popq %rsi
+            popq %rdx
+            popq %rcx
+            popq %rax
+
+            iretq
+
         .global enable_interrupts
     enable_interrupts:
         sti
@@ -164,3 +242,56 @@ isr_0x20:
     disable_interrupts:
         cli
         retq
+
+        .global jump_to_ring3
+    jump_to_ring3:
+        /* jump_to_ring3(rip, rsp, cs_selector, ss_selector)
+           RDI = RIP (user code entry)
+           RSI = RSP (user stack pointer)
+           RDX = CS selector
+           RCX = SS selector
+        */
+        cli
+        
+        /* CRITICAL: Ensure kernel stack is 16-byte aligned before building frame */
+        and $-16, %rsp
+        
+        /* Build iretq frame on current kernel stack:
+           Stack layout (bottom to top): SS, RSP, RFLAGS, CS, RIP
+        */
+        pushq %rcx          /* SS (user data selector 0x23) */
+        pushq %rsi          /* RSP (user stack) */
+        
+        /* Set RFLAGS: NO interrupts initially (IF=0), only reserved bit 1 */
+        pushq $0x2          /* RFLAGS = 0x2 (IF=0, reserved bit=1) */
+        
+        pushq %rdx          /* CS (user code selector 0x1B) */
+        pushq %rdi          /* RIP (user code entry) */
+        
+        /* CRITICAL: Set DS and ES to user data selector BEFORE iretq */
+        movw %cx, %ds
+        movw %cx, %es
+        
+        /* DEBUG: Print marker before iretq */
+        push %rax
+        push %rdx
+        mov $0x3F8, %dx
+        mov $'[', %al
+        outb %al, %dx
+        mov $'I', %al
+        outb %al, %dx
+        mov $'R', %al
+        outb %al, %dx
+        mov $'E', %al
+        outb %al, %dx
+        mov $'T', %al
+        outb %al, %dx
+        mov $']', %al
+        outb %al, %dx
+        mov $0x0A, %al
+        outb %al, %dx
+        pop %rdx
+        pop %rax
+        
+        /* Execute iretq */
+        iretq

@@ -21,6 +21,8 @@
 #define SYS_OPEN       10
 #define SYS_CLOSE      11
 #define SYS_STAT       12
+#define SYS_WASM_LOAD  13
+#define SYS_WASM_EXEC  14
 
 /* Syscall return type */
 typedef int64_t syscall_result_t;
@@ -43,5 +45,7 @@ int sys_read(int fd, void *buf, int count);
 int sys_write(int fd, const void *buf, int count);
 int sys_open(const char *path, int flags);
 int sys_close(int fd);
+int sys_wasm_load(const void *wasm_bytes, uint64_t len, const char *module_name);
+int sys_wasm_exec(int module_id, const char *func_name);
 
 #endif /* SYSCALL_H */

@@ -67,15 +67,27 @@ void gdt_install(void) {
     gdt_set_gate(3, 0, 0xFFFFFFFF, 0xFA, 0xAF); /* User code (RPL=3) */
     gdt_set_gate(4, 0, 0xFFFFFFFF, 0xF2, 0xAF); /* User data (RPL=3) */
 
+    extern void serial_puts(const char *s);
+    extern void serial_put_hex(uint64_t val);
+    serial_puts("[GDT] User code descriptor (index 3): access=0x");
+    serial_put_hex(gdt[3].access);
+    serial_puts(" gran=0x");
+    serial_put_hex(gdt[3].granularity);
+    serial_puts("\n[GDT] User data descriptor (index 4): access=0x");
+    serial_put_hex(gdt[4].access);
+    serial_puts(" gran=0x");
+    serial_put_hex(gdt[4].granularity);
+    serial_puts("\n");
+
     /* Prepare a minimal TSS and install its descriptor in GDT (entries 5 & 6) */
     static struct tss_entry tss = {0};
     /* Small kernel interrupt stack for privilege transitions (RSP0) */
-    static uint8_t kernel_stack[8192];
+    static uint8_t kernel_stack[8192] __attribute__((aligned(16)));
     uint64_t tss_base = (uint64_t)&tss;
     uint32_t tss_limit = sizeof(struct tss_entry) - 1;
 
-    /* Initialize RSP0 to top of kernel_stack */
-    tss.rsp0 = (uint64_t)(kernel_stack + sizeof(kernel_stack));
+    /* Initialize RSP0 to top of kernel_stack (stack grows downward) */
+    tss.rsp0 = (uint64_t)kernel_stack + sizeof(kernel_stack) - 8;
     tss.iomap_base = 0;
 
     /* Encode TSS descriptor (first 8 bytes) at gdt[5] */

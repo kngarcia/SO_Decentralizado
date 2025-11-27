@@ -4,6 +4,9 @@
 
 #include <stdint.h>
 
+/* Initialize physical memory allocator */
+void physical_memory_init(void);
+
 /* Allocate/free frames */
 uint32_t alloc_frame(void);
 void free_frame(uint32_t addr);

@@ -229,12 +229,14 @@ setup_paging_64:
     orl $0x003, %eax              /* present + writeable */
     leal pml4, %edx
     movl %eax, (%edx)
+    movl $0, 4(%edx)              /* Clear upper 32 bits */
 
     /* PDPT[0] -> PD */
     leal pd, %eax
     orl $0x003, %eax
     leal pdpt, %edx
     movl %eax, (%edx)
+    movl $0, 4(%edx)              /* Clear upper 32 bits */
 
     /* PD[0..511] = 2MB identity map */
     leal pd, %edx
@@ -245,7 +247,8 @@ setup_paging_64:
     mov %ecx, %eax
     shl $21, %eax                 /* 2MB per entry */
     orl $0x083, %eax              /* present + writeable + large page */
-    movl %eax, (%edx,%ecx,8)
+    movl %eax, (%edx,%ecx,8)      /* Write lower 32 bits */
+    movl $0, 4(%edx,%ecx,8)       /* CRITICAL: Clear upper 32 bits (no reserved bits) */
     incl %ecx
     jmp .loop_pd
 
