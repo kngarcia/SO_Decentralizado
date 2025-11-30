@@ -7,6 +7,8 @@
 #include "process_manager.h"
 #include "drivers/serial.h"
 #include "elf_loader.h"
+#include "net/udp.h"
+#include "net/netif.h"
 #include <string.h>
 
 /* Embedded builtin binaries are referenced via extern to avoid multiple
@@ -63,6 +65,14 @@ syscall_result_t syscall_dispatch(uint64_t num, uint64_t arg1, uint64_t arg2, ui
             return sys_wasm_load((const void *)arg1, arg2, (const char *)arg3);
         case SYS_WASM_EXEC:
             return sys_wasm_exec((int)arg1, (const char *)arg2);
+        case SYS_SOCKET:
+            return sys_socket((int)arg1, (int)arg2, (int)arg3);
+        case SYS_BIND:
+            return sys_bind((int)arg1, (const void *)arg2, (uint32_t)arg3);
+        case SYS_SENDTO:
+            return sys_sendto((int)arg1, (const void *)arg2, (uint32_t)arg3, 0, NULL, 0);
+        case SYS_RECVFROM:
+            return sys_recvfrom((int)arg1, (void *)arg2, (uint32_t)arg3, 0, NULL, NULL);
         default:
             return -1; /* EINVAL */
     }
@@ -288,5 +298,115 @@ int sys_wasm_exec(int module_id, const char *func_name) {
     serial_puts("[sys_wasm_exec] SUCCESS: result=");
     serial_put_hex(result);
     serial_putc('\n');
+    return result;
+}
+
+/* ============================================================
+ * Network Syscall Implementations (Phase 3)
+ * ============================================================
+ */
+
+#define AF_INET    2
+#define SOCK_DGRAM 2
+
+typedef struct {
+    uint16_t sin_family;
+    uint16_t sin_port;
+    uint8_t sin_addr[4];
+    uint8_t sin_zero[8];
+} sockaddr_in_t;
+
+int sys_socket(int domain, int type, int protocol) {
+    serial_puts("[sys_socket] Creating socket\n");
+    
+    // Only support UDP for now
+    if (domain != AF_INET || type != SOCK_DGRAM) {
+        serial_puts("[sys_socket] ERROR: Only AF_INET/SOCK_DGRAM supported\n");
+        return -1;
+    }
+    
+    return udp_socket();
+}
+
+int sys_bind(int sockfd, const void *addr, uint32_t addrlen) {
+    serial_puts("[sys_bind] Binding socket ");
+    serial_put_hex(sockfd);
+    serial_putc('\n');
+    
+    if (!addr || addrlen < sizeof(sockaddr_in_t)) return -1;
+    
+    const sockaddr_in_t *sa = (const sockaddr_in_t *)addr;
+    
+    // Convert network byte order to host byte order
+    uint16_t port = ((sa->sin_port & 0xFF) << 8) | ((sa->sin_port >> 8) & 0xFF);
+    
+    return udp_bind(sockfd, port);
+}
+
+int sys_connect(int sockfd, const void *addr, uint32_t addrlen) {
+    // UDP is connectionless, just return success
+    return 0;
+}
+
+int sys_listen(int sockfd, int backlog) {
+    // Not applicable for UDP
+    return -1;
+}
+
+int sys_accept(int sockfd, void *addr, uint32_t *addrlen) {
+    // Not applicable for UDP
+    return -1;
+}
+
+int sys_send(int sockfd, const void *buf, uint32_t len, int flags) {
+    // For UDP, need destination address
+    return -1;
+}
+
+int sys_recv(int sockfd, void *buf, uint32_t len, int flags) {
+    // Use recvfrom for UDP
+    return sys_recvfrom(sockfd, buf, len, flags, NULL, NULL);
+}
+
+int sys_sendto(int sockfd, const void *buf, uint32_t len, int flags, const void *dest_addr, uint32_t addrlen) {
+    if (!buf) return -1;
+    
+    // For simplified implementation, use hardcoded destination for now
+    // In real implementation, would parse dest_addr
+    netif_t *netif = netif_get_default();
+    if (!netif) return -1;
+    
+    ip_addr_t dest_ip = {{192, 168, 1, 100}}; // Placeholder
+    uint16_t dest_port = 5000;
+    
+    if (dest_addr && addrlen >= sizeof(sockaddr_in_t)) {
+        const sockaddr_in_t *sa = (const sockaddr_in_t *)dest_addr;
+        for (int i = 0; i < 4; i++) {
+            dest_ip.addr[i] = sa->sin_addr[i];
+        }
+        dest_port = ((sa->sin_port & 0xFF) << 8) | ((sa->sin_port >> 8) & 0xFF);
+    }
+    
+    return udp_sendto(sockfd, buf, (uint16_t)len, &dest_ip, dest_port);
+}
+
+int sys_recvfrom(int sockfd, void *buf, uint32_t len, int flags, void *src_addr, uint32_t *addrlen) {
+    if (!buf) return -1;
+    
+    ip_addr_t src_ip;
+    uint16_t src_port;
+    
+    int result = udp_recvfrom(sockfd, buf, (uint16_t)len, &src_ip, &src_port);
+    
+    if (result > 0 && src_addr && addrlen && *addrlen >= sizeof(sockaddr_in_t)) {
+        sockaddr_in_t *sa = (sockaddr_in_t *)src_addr;
+        sa->sin_family = AF_INET;
+        sa->sin_port = ((src_port & 0xFF) << 8) | ((src_port >> 8) & 0xFF);
+        for (int i = 0; i < 4; i++) {
+            sa->sin_addr[i] = src_ip.addr[i];
+        }
+        *addrlen = sizeof(sockaddr_in_t);
+    }
+    
     return result;
 }

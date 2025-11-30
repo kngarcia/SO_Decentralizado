@@ -3,6 +3,7 @@
  * Portabel bootimage for any UEFI/BIOS system (VM, physical hardware, cloud)
  */
 #include <stdint.h>
+#include "net/netif.h"
 
 /* forward declarations for functions in other modules */
 void gdt_install(void);
@@ -59,6 +60,51 @@ void kmain(uint32_t mbi_ptr) {
     /* Setup syscall interface (Phase 1) */
     syscall_install();
     show_string("[kmain] Syscall interface installed\n");
+    
+    /* Initialize network stack (Phase 3) */
+    show_string("[kmain] Initializing network stack...\n");
+    extern int netif_init(void);
+    extern int eth_init(void);
+    extern int arp_init(void);
+    extern int ip_init(void);
+    extern int udp_init(void);
+    extern int e1000_init(void);
+    extern int mdns_init(void);
+    extern int p2p_init(uint32_t);
+    
+    netif_init();
+    eth_init();
+    arp_init();
+    ip_init();
+    udp_init();
+    
+    /* Initialize E1000 NIC driver */
+    if (e1000_init() == 0) {
+        show_string("[kmain] E1000 NIC initialized\n");
+        
+        /* Setup IP address (hardcoded for now) */
+        extern netif_t* netif_get_default(void);
+        extern int netif_set_addr(netif_t*, ip_addr_t*, ip_addr_t*, ip_addr_t*);
+        netif_t *netif = netif_get_default();
+        if (netif) {
+            ip_addr_t ip = {{192, 168, 1, 2}};
+            ip_addr_t netmask = {{255, 255, 255, 0}};
+            ip_addr_t gateway = {{192, 168, 1, 1}};
+            netif_set_addr(netif, &ip, &netmask, &gateway);
+            show_string("[kmain] Network configured: 192.168.1.2\n");
+        }
+        
+        /* Initialize mDNS for service discovery */
+        mdns_init();
+        
+        /* Initialize P2P network (node ID based on last octet of IP) */
+        p2p_init(2);
+        show_string("[kmain] P2P network initialized\n");
+    } else {
+        show_string("[kmain] WARNING: E1000 NIC not found (networking disabled)\n");
+    }
+    
+    show_string("[kmain] Network stack initialized\n");
     
     /* Demo: load and execute embedded user ELF (phase 1 test) */
 #ifdef RUN_FORK_DEMO
