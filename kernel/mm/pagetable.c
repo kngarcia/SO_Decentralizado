@@ -308,4 +308,77 @@ void pt_mark_user_recursive(void *pml4_base, uint64_t vaddr) {
     }
 }
 
+/* Wrapper function for MMIO */
+uint64_t *get_kernel_pml4(void) {
+    return (uint64_t *)pt_get_kernel_pml4();
+}
+
+/* Invalidate TLB entry for a single page */
+void invlpg(uint64_t addr) {
+    asm volatile("invlpg (%0)" :: "r"(addr) : "memory");
+}
+
+/* Map a single 4KB page from virtual to physical address
+ * This is a simplified version specifically for MMIO mapping
+ * Works with identity-mapped kernel page tables
+ */
+void pagetable_map(uint64_t *pml4, uint64_t virt, uint64_t phys, int flags) {
+    if (!pml4) return;
+    
+    extern void show_string(const char *s);
+    extern uint32_t alloc_frame(void);
+    extern void *memset(void *dst, int c, size_t n);
+    
+    uint64_t pml4_idx = (virt >> 39) & 0x1FFULL;
+    uint64_t pdpt_idx = (virt >> 30) & 0x1FFULL;
+    uint64_t pd_idx = (virt >> 21) & 0x1FFULL;
+    uint64_t pt_idx = (virt >> 12) & 0x1FFULL;
+    
+    /* Ensure PML4 entry exists */
+    if (!(pml4[pml4_idx] & 1)) {
+        uint32_t pdpt_phys = alloc_frame();
+        if (!pdpt_phys) {
+            show_string("[pagetable_map] ERROR: Cannot allocate PDPT\n");
+            return;
+        }
+        /* Identity-mapped, so physical address = virtual address in low memory */
+        void *pdpt = (void *)(uint64_t)pdpt_phys;
+        memset(pdpt, 0, 4096);
+        pml4[pml4_idx] = pdpt_phys | 3;  /* Present | RW */
+    }
+    uint64_t *pdpt = (uint64_t *)(pml4[pml4_idx] & ~0xFFFULL);
+    
+    /* Ensure PDPT entry exists */
+    if (!(pdpt[pdpt_idx] & 1)) {
+        uint32_t pd_phys = alloc_frame();
+        if (!pd_phys) {
+            show_string("[pagetable_map] ERROR: Cannot allocate PD\n");
+            return;
+        }
+        void *pd = (void *)(uint64_t)pd_phys;
+        memset(pd, 0, 4096);
+        pdpt[pdpt_idx] = pd_phys | 3;  /* Present | RW */
+    }
+    uint64_t *pd = (uint64_t *)(pdpt[pdpt_idx] & ~0xFFFULL);
+    
+    /* Ensure PD entry exists */
+    if (!(pd[pd_idx] & 1)) {
+        uint32_t pt_phys = alloc_frame();
+        if (!pt_phys) {
+            show_string("[pagetable_map] ERROR: Cannot allocate PT\n");
+            return;
+        }
+        void *pt = (void *)(uint64_t)pt_phys;
+        memset(pt, 0, 4096);
+        pd[pd_idx] = pt_phys | 3;  /* Present | RW */
+    }
+    uint64_t *pt = (uint64_t *)(pd[pd_idx] & ~0xFFFULL);
+    
+    /* Map the page with specified flags */
+    pt[pt_idx] = (phys & ~0xFFFULL) | flags;
+    
+    /* Flush TLB for this address */
+    invlpg(virt);
+}
+
 #endif

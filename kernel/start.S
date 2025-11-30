@@ -221,7 +221,7 @@ _start64:
     hlt
     jmp .hang
 
-/* Minimal 64-bit paging setup (identity map first 2GB) */
+/* Minimal 64-bit paging setup (identity map first 4GB for MMIO access) */
 .code32
 setup_paging_64:
     /* PML4[0] -> PDPT */
@@ -231,28 +231,91 @@ setup_paging_64:
     movl %eax, (%edx)
     movl $0, 4(%edx)              /* Clear upper 32 bits */
 
-    /* PDPT[0] -> PD */
-    leal pd, %eax
+    /* PDPT[0] -> PD0 (0-1GB), PDPT[1] -> PD1 (1-2GB), 
+       PDPT[2] -> PD2 (2-3GB), PDPT[3] -> PD3 (3-4GB) */
+    leal pd0, %eax
     orl $0x003, %eax
     leal pdpt, %edx
-    movl %eax, (%edx)
-    movl $0, 4(%edx)              /* Clear upper 32 bits */
+    movl %eax, 0(%edx)
+    movl $0, 4(%edx)
+    
+    leal pd1, %eax
+    orl $0x003, %eax
+    movl %eax, 8(%edx)
+    movl $0, 12(%edx)
+    
+    leal pd2, %eax
+    orl $0x003, %eax
+    movl %eax, 16(%edx)
+    movl $0, 20(%edx)
+    
+    leal pd3, %eax
+    orl $0x003, %eax
+    movl %eax, 24(%edx)
+    movl $0, 28(%edx)
 
-    /* PD[0..511] = 2MB identity map */
-    leal pd, %edx
+    /* Identity map 4GB using 2MB pages (4 * 512 entries) */
+    /* PD0: 0x00000000 - 0x3FFFFFFF (0-1GB) */
+    leal pd0, %edx
     xor %ecx, %ecx
-.loop_pd:
+    xor %esi, %esi                /* Physical address accumulator */
+.loop_pd0:
     cmpl $512, %ecx
-    je .done_pd
-    mov %ecx, %eax
-    shl $21, %eax                 /* 2MB per entry */
+    je .done_pd0
+    movl %esi, %eax
     orl $0x083, %eax              /* present + writeable + large page */
-    movl %eax, (%edx,%ecx,8)      /* Write lower 32 bits */
-    movl $0, 4(%edx,%ecx,8)       /* CRITICAL: Clear upper 32 bits (no reserved bits) */
+    movl %eax, (%edx,%ecx,8)
+    movl $0, 4(%edx,%ecx,8)
+    addl $0x200000, %esi          /* Next 2MB */
     incl %ecx
-    jmp .loop_pd
+    jmp .loop_pd0
 
-.done_pd:
+.done_pd0:
+    /* PD1: 0x40000000 - 0x7FFFFFFF (1-2GB) */
+    leal pd1, %edx
+    xor %ecx, %ecx
+.loop_pd1:
+    cmpl $512, %ecx
+    je .done_pd1
+    movl %esi, %eax
+    orl $0x083, %eax
+    movl %eax, (%edx,%ecx,8)
+    movl $0, 4(%edx,%ecx,8)
+    addl $0x200000, %esi
+    incl %ecx
+    jmp .loop_pd1
+
+.done_pd1:
+    /* PD2: 0x80000000 - 0xBFFFFFFF (2-3GB) */
+    leal pd2, %edx
+    xor %ecx, %ecx
+.loop_pd2:
+    cmpl $512, %ecx
+    je .done_pd2
+    movl %esi, %eax
+    orl $0x083, %eax
+    movl %eax, (%edx,%ecx,8)
+    movl $0, 4(%edx,%ecx,8)
+    addl $0x200000, %esi
+    incl %ecx
+    jmp .loop_pd2
+
+.done_pd2:
+    /* PD3: 0xC0000000 - 0xFFFFFFFF (3-4GB) - MMIO region */
+    leal pd3, %edx
+    xor %ecx, %ecx
+.loop_pd3:
+    cmpl $512, %ecx
+    je .done_pd3
+    movl %esi, %eax
+    orl $0x083, %eax
+    movl %eax, (%edx,%ecx,8)
+    movl $0, 4(%edx,%ecx,8)
+    addl $0x200000, %esi
+    incl %ecx
+    jmp .loop_pd3
+
+.done_pd3:
     ret
 
     .section .data
@@ -264,7 +327,10 @@ setup_paging_64:
     .global pml4
     pml4: .space 4096
     pdpt: .space 4096
-    pd:   .space 4096
+    pd0:  .space 4096
+    pd1:  .space 4096
+    pd2:  .space 4096
+    pd3:  .space 4096
 
     .section .bss
     .align 16

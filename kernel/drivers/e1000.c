@@ -160,10 +160,18 @@ int e1000_recv_packet(netif_t *netif, void *buf, uint32_t max_len) {
 }
 
 int e1000_init(void) {
-    // For now, use hardcoded MMIO base (should detect via PCI)
-    e1000_device.mem_base = 0xFEBC0000;
+    extern void *mmio_map(uint64_t phys_addr, size_t size);
     
     serial_puts("[e1000] Initializing Intel E1000 NIC\n");
+    
+    /* Map E1000 MMIO region (hardcoded address, should detect via PCI) */
+    void *mmio_base = mmio_map(0xFEBC0000, 0x20000);  /* 128KB */
+    if (!mmio_base) {
+        serial_puts("[e1000] ERROR: Failed to map MMIO region\n");
+        return -1;
+    }
+    e1000_device.mem_base = (uint64_t)mmio_base;
+    serial_puts("[e1000] MMIO mapped successfully\n");
     
     // Reset device
     uint32_t ctrl = e1000_read32(E1000_REG_CTRL);

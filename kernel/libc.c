@@ -53,3 +53,48 @@ char *strncpy(char *dst, const char *src, size_t n) {
     }
     return dst;
 }
+
+/* Helper function to print integers in decimal */
+void show_int(int val) {
+    extern void serial_putc(char c);
+    
+    if (val < 0) {
+        serial_putc('-');
+        val = -val;
+    }
+    
+    if (val == 0) {
+        serial_putc('0');
+        return;
+    }
+    
+    char buf[12];
+    int i = 0;
+    while (val > 0) {
+        buf[i++] = '0' + (val % 10);
+        val /= 10;
+    }
+    
+    /* Print in reverse */
+    while (i > 0) {
+        serial_putc(buf[--i]);
+    }
+}
+
+/* Helper function to print hex values */
+void show_hex(uint64_t val) {
+    extern void serial_putc(char c);
+    
+    const char hex_chars[] = "0123456789ABCDEF";
+    char buf[17];
+    buf[16] = '\0';
+    
+    for (int i = 15; i >= 0; i--) {
+        buf[i] = hex_chars[val & 0xF];
+        val >>= 4;
+    }
+    
+    for (int i = 0; i < 16; i++) {
+        serial_putc(buf[i]);
+    }
+}
