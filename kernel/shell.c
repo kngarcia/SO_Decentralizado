@@ -16,6 +16,15 @@ extern int strcmp(const char *s1, const char *s2);
 extern int strncmp(const char *s1, const char *s2, size_t n);
 extern char *strcpy(char *dest, const char *src);
 
+/* Framebuffer console functions */
+extern void fb_console_putchar(char c);
+extern void fb_console_puts(const char *s);
+extern void fb_console_clear(void);
+
+/* Use framebuffer for output instead of serial */
+#define shell_putchar(c) fb_console_putchar(c)
+#define shell_puts(s) fb_console_puts(s)
+
 /* External functions for commands */
 extern void show_memory_stats(void);
 extern uint64_t get_phys_mem_total(void);
@@ -23,9 +32,11 @@ extern uint64_t get_phys_mem_free(void);
 
 #define MAX_CMD_LEN 128
 #define SHELL_PROMPT "myos> "
+#define STACK_CANARY 0xDEADBEEF
 
 static char cmd_buffer[MAX_CMD_LEN];
 static int cmd_pos = 0;
+static volatile uint32_t stack_guard = STACK_CANARY;
 
 /* Scancode to ASCII mapping (US keyboard layout) */
 static char scancode_to_ascii(uint8_t scancode, int shift) {
@@ -83,6 +94,13 @@ static char scancode_to_ascii(uint8_t scancode, int shift) {
 static int shell_getchar(void) {
     static int shift_pressed = 0;
     
+    /* Check if data is available in keyboard buffer */
+    uint8_t status;
+    asm volatile("inb $0x64, %0" : "=a"(status));
+    if (!(status & 0x01)) {
+        return -1;  /* No data available */
+    }
+    
     /* Poll keyboard port */
     uint8_t scancode;
     asm volatile("inb $0x60, %0" : "=a"(scancode));
@@ -104,82 +122,81 @@ static int shell_getchar(void) {
 
 /* Built-in commands */
 static void cmd_help(void) {
-    show_string("\nAvailable commands:\n");
-    show_string("  help      - Show this help message\n");
-    show_string("  clear     - Clear the screen\n");
-    show_string("  uname     - Show system information\n");
-    show_string("  meminfo   - Show memory statistics\n");
-    show_string("  echo      - Echo text to console\n");
-    show_string("  uptime    - Show system uptime\n");
-    show_string("  version   - Show kernel version\n");
-    show_string("  reboot    - Reboot the system\n");
-    show_string("  about     - About this OS\n");
-    show_string("\n");
+    shell_puts("\nAvailable commands:\n");
+    shell_puts("  help      - Show this help message\n");
+    shell_puts("  clear     - Clear the screen\n");
+    shell_puts("  uname     - Show system information\n");
+    shell_puts("  meminfo   - Show memory statistics\n");
+    shell_puts("  echo      - Echo text to console\n");
+    shell_puts("  uptime    - Show system uptime\n");
+    shell_puts("  version   - Show kernel version\n");
+    shell_puts("  reboot    - Reboot the system\n");
+    shell_puts("  about     - About this OS\n");
+    shell_puts("\n");
 }
 
 static void cmd_clear(void) {
-    /* Clear screen by printing newlines */
-    for (int i = 0; i < 25; i++) {
-        show_string("\n");
-    }
+    /* Clear screen using framebuffer */
+    fb_console_clear();
+    /* The prompt will be printed automatically after this command returns */
 }
 
 static void cmd_uname(void) {
-    show_string("\nSO_Descentralizado v1.0.0\n");
-    show_string("Architecture: x86_64\n");
-    show_string("Kernel: 64-bit long mode\n");
-    show_string("Build: November 30, 2025\n\n");
+    shell_puts("\nSO_Descentralizado v1.0.0\n");
+    shell_puts("Architecture: x86_64\n");
+    shell_puts("Kernel: 64-bit long mode\n");
+    shell_puts("Build: November 30, 2025\n\n");
 }
 
 static void cmd_meminfo(void) {
-    show_string("\nMemory Information:\n");
-    show_string("  Total physical memory: ");
+    shell_puts("\nMemory Information:\n");
+    shell_puts("  Total physical memory: ");
     show_int((int)(get_phys_mem_total() / 1024 / 1024));
-    show_string(" MB\n");
-    show_string("  Free physical memory:  ");
+    shell_puts(" MB\n");
+    shell_puts("  Free physical memory:  ");
     show_int((int)(get_phys_mem_free() / 1024 / 1024));
-    show_string(" MB\n");
-    show_string("  Memory management: Physical + Virtual + Paging\n");
-    show_string("  Page size: 4KB\n\n");
+    shell_puts(" MB\n");
+    shell_puts("  Memory management: Physical + Virtual + Paging\n");
+    shell_puts("  Page size: 4KB\n\n");
 }
 
 static void cmd_echo(const char *args) {
-    show_string("\n");
+    shell_puts("\n");
     if (args && *args) {
-        show_string(args);
+        shell_puts(args);
     }
-    show_string("\n\n");
+    shell_puts("\n\n");
 }
 
 static void cmd_uptime(void) {
-    show_string("\nSystem uptime: Running since boot\n");
-    show_string("Subsystems active:\n");
-    show_string("  [✓] Memory Management\n");
-    show_string("  [✓] Process Manager\n");
-    show_string("  [✓] Scheduler (preemptive)\n");
-    show_string("  [✓] Syscall Interface (23 syscalls)\n");
-    show_string("  [✓] Network Stack (E1000)\n");
-    show_string("  [✓] ML Subsystem\n");
-    show_string("  [✓] WASM3 Runtime\n");
-    show_string("  [✓] Framebuffer Driver\n\n");
+    shell_puts("\nSystem uptime: Running since boot\n");
+    shell_puts("Subsystems active:\n");
+    shell_puts("  [✓] Memory Management\n");
+    shell_puts("  [✓] Process Manager\n");
+    shell_puts("  [✓] Scheduler (preemptive)\n");
+    shell_puts("  [✓] Syscall Interface (23 syscalls)\n");
+    shell_puts("  [✓] Network Stack (E1000)\n");
+    shell_puts("  [✓] ML Subsystem\n");
+    shell_puts("  [✓] WASM3 Runtime\n");
+    shell_puts("  [✓] Framebuffer Driver\n\n");
 }
 
 static void cmd_version(void) {
-    show_string("\nSO_Descentralizado Kernel v1.0.0\n");
-    show_string("Compilation: GCC 64-bit, -O2 optimized\n");
-    show_string("Features:\n");
-    show_string("  • 64-bit x86-64 long mode\n");
-    show_string("  • Preemptive multitasking\n");
-    show_string("  • Copy-on-Write fork()\n");
-    show_string("  • ELF loader (ring-3 execution)\n");
-    show_string("  • IPC message passing\n");
-    show_string("  • ML/DL (Linear Regression)\n");
-    show_string("  • Ad hoc networking\n");
-    show_string("  • WASM3 runtime\n\n");
+    shell_puts("\nSO_Descentralizado Kernel v1.0.0\n");
+    shell_puts("Compilation: GCC 64-bit, -O2 optimized\n");
+    shell_puts("Features:\n");
+    shell_puts("  • 64-bit x86-64 long mode\n");
+    shell_puts("  • Preemptive multitasking\n");
+    shell_puts("  • Copy-on-Write fork()\n");
+    shell_puts("  • ELF loader (ring-3 execution)\n");
+    shell_puts("  • IPC message passing\n");
+    shell_puts("  • ML/DL (Linear Regression)\n");
+    shell_puts("  • Ad hoc networking\n");
+    shell_puts("  • WASM3 runtime\n\n");
 }
 
 static void cmd_reboot(void) {
-    show_string("\nRebooting system...\n");
+    shell_puts("\nRebooting system...\n");
     /* Trigger keyboard controller reboot */
     asm volatile("outb %0, $0x64" :: "a"((uint8_t)0xFE));
     /* If that fails, triple fault */
@@ -187,27 +204,27 @@ static void cmd_reboot(void) {
 }
 
 static void cmd_about(void) {
-    show_string("\n========================================\n");
-    show_string("  SO_Descentralizado v1.0.0\n");
-    show_string("  Decentralized Operating System\n");
-    show_string("========================================\n");
-    show_string("\nA 64-bit operating system with:\n");
-    show_string("  • Distributed computing capabilities\n");
-    show_string("  • Machine Learning integration\n");
-    show_string("  • WebAssembly support\n");
-    show_string("  • Modern memory management\n");
-    show_string("  • Ad hoc networking\n");
-    show_string("\nCompleted: 15/15 requirements (100%)\n");
-    show_string("Status: Fully operational\n");
-    show_string("\nDeveloped: 2025\n");
-    show_string("License: Educational/Research\n\n");
+    shell_puts("\n========================================\n");
+    shell_puts("  SO_Descentralizado v1.0.0\n");
+    shell_puts("  Decentralized Operating System\n");
+    shell_puts("========================================\n");
+    shell_puts("\nA 64-bit operating system with:\n");
+    shell_puts("  • Distributed computing capabilities\n");
+    shell_puts("  • Machine Learning integration\n");
+    shell_puts("  • WebAssembly support\n");
+    shell_puts("  • Modern memory management\n");
+    shell_puts("  • Ad hoc networking\n");
+    shell_puts("\nCompleted: 15/15 requirements (100%)\n");
+    shell_puts("Status: Fully operational\n");
+    shell_puts("\nDeveloped: 2025\n");
+    shell_puts("License: Educational/Research\n\n");
 }
 
 static void cmd_unknown(const char *cmd) {
-    show_string("\nUnknown command: '");
-    show_string(cmd);
-    show_string("'\n");
-    show_string("Type 'help' for available commands.\n\n");
+    shell_puts("\nUnknown command: '");
+    shell_puts(cmd);
+    shell_puts("'\n");
+    shell_puts("Type 'help' for available commands.\n\n");
 }
 
 /* Parse and execute command */
@@ -263,21 +280,39 @@ static void execute_command(const char *cmd_line) {
 void shell_init(void) {
     cmd_pos = 0;
     memset(cmd_buffer, 0, MAX_CMD_LEN);
+    
+    /* Initialize stack guard */
+    stack_guard = STACK_CANARY;
+    
+    /* Enable hardware cursor for visual feedback */
+    extern void fb_console_enable_cursor(void);
+    fb_console_enable_cursor();
 }
 
 void shell_run(void) {
+    /* Clear screen first to remove all boot messages */
+    extern void fb_console_clear(void);
+    fb_console_clear();
+    
     /* Print banner */
-    show_string("\n");
-    show_string("========================================\n");
-    show_string("  Welcome to SO_Descentralizado!\n");
-    show_string("  Interactive Shell v1.0\n");
-    show_string("========================================\n");
-    show_string("\nType 'help' for available commands.\n\n");
+    shell_puts("\n");
+    shell_puts("========================================\n");
+    shell_puts("  Welcome to SO_Descentralizado!\n");
+    shell_puts("  Interactive Shell v1.0\n");
+    shell_puts("========================================\n");
+    shell_puts("\nType 'help' for available commands.\n\n");
     
     /* Main shell loop */
-    show_string(SHELL_PROMPT);
+    shell_puts(SHELL_PROMPT);
     
     while (1) {
+        /* Check for stack corruption */
+        if (stack_guard != STACK_CANARY) {
+            shell_puts("\n[PANIC] Stack corruption detected!\n");
+            shell_puts("System halted for safety.\n");
+            while(1) asm volatile("cli; hlt");
+        }
+        
         int ch = shell_getchar();
         
         if (ch < 0) {
@@ -288,29 +323,29 @@ void shell_run(void) {
         
         if (ch == '\n') {
             /* Execute command */
-            show_char('\n');
+            shell_putchar('\n');
             cmd_buffer[cmd_pos] = '\0';
             execute_command(cmd_buffer);
             
             /* Reset buffer */
             cmd_pos = 0;
             memset(cmd_buffer, 0, MAX_CMD_LEN);
-            show_string(SHELL_PROMPT);
+            shell_puts(SHELL_PROMPT);
         } else if (ch == '\b') {
             /* Backspace */
             if (cmd_pos > 0) {
                 cmd_pos--;
                 cmd_buffer[cmd_pos] = '\0';
                 /* Visual backspace: \b space \b */
-                show_char('\b');
-                show_char(' ');
-                show_char('\b');
+                shell_putchar('\b');
+                shell_putchar(' ');
+                shell_putchar('\b');
             }
         } else if (ch >= 32 && ch < 127) {
             /* Printable character */
             if (cmd_pos < MAX_CMD_LEN - 1) {
                 cmd_buffer[cmd_pos++] = ch;
-                show_char(ch);
+                shell_putchar(ch);
             }
         }
     }

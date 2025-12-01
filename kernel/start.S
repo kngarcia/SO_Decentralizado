@@ -354,7 +354,7 @@ setup_paging_64:
 
     .section .bss
     .align 16
-    stack_space: .skip 0x8000
+    stack_space: .skip 0x10000  /* Increased from 32KB to 64KB for safety */
     stack_top:
     
     .section .linker_symbols
