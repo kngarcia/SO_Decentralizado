@@ -161,6 +161,16 @@ void kmain(uint32_t mbi_ptr) {
     show_string(" (expected ~15)\n");
     show_string("[kmain] ML subsystem operational (100%)\n");
     
+    /* Start interactive shell instead of demos */
+    show_string("\n[kmain] Starting interactive shell...\n");
+    extern void shell_init(void);
+    extern void shell_run(void);
+    shell_init();
+    shell_run();
+    
+    /* If shell returns (shouldn't happen), fall back to demos */
+    show_string("[kmain] Shell exited, running demos...\n");
+    
     /* Demo: load and execute embedded user ELF (phase 1 test) */
 #ifdef RUN_FORK_DEMO
     extern void elf_loader_fork_demo(void);

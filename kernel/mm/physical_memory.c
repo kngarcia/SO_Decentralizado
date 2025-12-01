@@ -48,6 +48,22 @@ void free_frame(uint32_t addr) {
     frame_refcount[frame] = 0;
 }
 
+/* Get total physical memory in bytes */
+uint64_t get_phys_mem_total(void) {
+    return (uint64_t)MAX_FRAMES * FRAME_SIZE;
+}
+
+/* Get free physical memory in bytes */
+uint64_t get_phys_mem_free(void) {
+    uint32_t free_frames = 0;
+    for (uint32_t i = 0; i < MAX_FRAMES; i++) {
+        if (!test_frame(i)) {
+            free_frames++;
+        }
+    }
+    return (uint64_t)free_frames * FRAME_SIZE;
+}
+
 /* Increase reference count for a physical frame (address must be frame aligned) */
 void frame_incref(uint32_t addr) {
     uint32_t frame = addr / FRAME_SIZE;

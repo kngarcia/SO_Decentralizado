@@ -45,3 +45,8 @@ void serial_put_hex(uint64_t value) {
     }
 }
 
+/* show_char - display a single character to serial port */
+void show_char(char c) {
+    serial_putc(c);
+}
+
