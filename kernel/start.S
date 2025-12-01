@@ -206,6 +206,24 @@ _start64:
     /* Setup 64-bit stack */
     lea stack_top(%rip), %rsp
 
+    /* Enable FPU/SSE for floating point operations (required for ML) */
+    /* Clear CR0.EM (bit 2) = disable FPU emulation */
+    /* Set CR0.MP (bit 1) = monitor coprocessor */
+    mov %cr0, %rax
+    and $~(1 << 2), %rax    /* CR0.EM = 0 */
+    or $(1 << 1), %rax      /* CR0.MP = 1 */
+    mov %rax, %cr0
+    
+    /* Set CR4.OSFXSR (bit 9) = enable SSE instructions */
+    /* Set CR4.OSXMMEXCPT (bit 10) = enable SIMD exceptions */
+    mov %cr4, %rax
+    or $(1 << 9), %rax      /* CR4.OSFXSR = 1 */
+    or $(1 << 10), %rax     /* CR4.OSXMMEXCPT = 1 */
+    mov %rax, %cr4
+    
+    /* Initialize FPU */
+    fninit
+
     /* Zero BSS */
     lea __bss_start(%rip), %rdi
     lea __bss_end(%rip), %rcx

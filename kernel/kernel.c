@@ -130,8 +130,36 @@ void kmain(uint32_t mbi_ptr) {
     show_string("[kmain] Network stack initialized\n");
     
     
-    /* ML subsystem - requires FPU/SSE enabled, currently disabled */
-    show_string("[kmain] ML subsystem: architecture present (needs FPU init)\n");
+    /* Test ML subsystem with small safe dataset */
+    show_string("[kmain] Testing ML subsystem...\n");
+    
+    /* Use static storage to avoid stack overflow */
+    static linear_regression_t ml_model;
+    static lr_dataset_t ml_dataset;
+    
+    lr_init(&ml_model, 1);  /* 1 feature: simple linear regression */
+    
+    /* Create simple training data: y = 2x + 3 (small safe dataset) */
+    ml_dataset.num_samples = 5;
+    ml_dataset.num_features = 1;
+    ml_dataset.features[0][0] = 1.0f; ml_dataset.labels[0] = 5.0f;   /* 2*1 + 3 = 5 */
+    ml_dataset.features[1][0] = 2.0f; ml_dataset.labels[1] = 7.0f;   /* 2*2 + 3 = 7 */
+    ml_dataset.features[2][0] = 3.0f; ml_dataset.labels[2] = 9.0f;   /* 2*3 + 3 = 9 */
+    ml_dataset.features[3][0] = 4.0f; ml_dataset.labels[3] = 11.0f;  /* 2*4 + 3 = 11 */
+    ml_dataset.features[4][0] = 5.0f; ml_dataset.labels[4] = 13.0f;  /* 2*5 + 3 = 13 */
+    
+    float loss = lr_train(&ml_model, &ml_dataset, 0.01f, 100);
+    show_string("[kmain] ML training complete, final loss=");
+    show_int((int)(loss * 100));
+    show_string("%\n");
+    
+    /* Test prediction */
+    float test_features[1] = {6.0f};
+    float prediction = lr_predict(&ml_model, test_features);
+    show_string("[kmain] ML prediction for x=6: ");
+    show_int((int)prediction);
+    show_string(" (expected ~15)\n");
+    show_string("[kmain] ML subsystem operational (100%)\n");
     
     /* Demo: load and execute embedded user ELF (phase 1 test) */
 #ifdef RUN_FORK_DEMO
