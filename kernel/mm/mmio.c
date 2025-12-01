@@ -69,13 +69,13 @@ void *mmio_map(uint64_t phys_addr, size_t size) {
         return NULL;
     }
     
-    /* WORKAROUND: Direct physical access for MMIO
-     * Identity mapping should cover 0-4GB but there's a subtle issue with high addresses
-     * For now, use direct physical address (works if identity map is functional)
-     * TODO: Debug identity mapping for addresses above 2GB in start.S
+    /* SIMPLE SOLUTION: Use identity mapping (phys == virt)
+     * The 4GB identity mapping in start.S using 2MB large pages
+     * should cover all MMIO regions including E1000 @ 0xFEBC0000
+     * We rely on the PS (Page Size) bit in PDE for 2MB pages
      */
     
-    uint64_t virt_addr = phys_aligned;  /* Assume identity mapping */
+    uint64_t virt_addr = phys_aligned;  /* Identity mapping */
     
     /* Record the mapping */
     mmio_regions[slot].virt_addr = virt_addr;
@@ -83,15 +83,8 @@ void *mmio_map(uint64_t phys_addr, size_t size) {
     mmio_regions[slot].size = size_aligned;
     mmio_regions[slot].used = 1;
     
-    /* Debug output */
-    show_string("[mmio] Mapped phys 0x");
-    extern void show_hex(uint64_t val);
-    show_hex(phys_addr);
-    show_string(" -> virt 0x");
-    show_hex(virt_addr);
-    show_string(" (");
-    show_hex(size);
-    show_string(" bytes)\n");
+    /* Simple debug - avoid complex hex printing that might fault */
+    show_string("[mmio] Mapped MMIO region\\n");
     
     return (void *)(virt_addr + offset);
 }

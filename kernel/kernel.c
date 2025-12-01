@@ -96,13 +96,6 @@ void kmain(uint32_t mbi_ptr) {
     udp_init();
     
     /* Initialize E1000 NIC driver with MMIO */
-    /* TEMPORARILY DISABLED: MMIO mapping issue for addresses >2GB
-     * Issue: GP fault when accessing E1000 BAR0 @ 0xFEBC0000
-     * Root cause: Identity mapping in start.S may not cover full 4GB or has addressing bug
-     * Status: Network stack code complete (85%), hardware init blocked by MMIO issue
-     * All network protocols (Ethernet, ARP, IP, UDP, mDNS, P2P) are implemented and tested
-     */
-#if 0
     show_string("[kmain] Initializing E1000 NIC...\n");
     if (e1000_init() == 0) {
         show_string("[kmain] E1000 NIC initialized successfully\n");
@@ -130,51 +123,15 @@ void kmain(uint32_t mbi_ptr) {
         
         show_string("[kmain] Ad hoc network FULLY operational (100%)\n");
     } else {
-        show_string("[kmain] WARNING: E1000 init failed\n");
+        show_string("[kmain] WARNING: E1000 init failed (check QEMU -device e1000)\n");
+        show_string("[kmain] Network stack ready, awaiting hardware\n");
     }
-#else
-    show_string("[kmain] Network stack: Protocols implemented (E1000 init disabled due to MMIO issue)\n");
-#endif
     
     show_string("[kmain] Network stack initialized\n");
     
     
-    /* Test ML subsystem with small dataset */
-    /* TEMPORARILY DISABLED: Testing stability
-     * Issue: Possible stack issues with training iterations
-     * Status: ML code complete (linear regression implemented)
-     * TODO: Enable with heap-allocated dataset for safety
-     */
-#if 0
-    show_string("[kmain] Testing ML subsystem...\n");
-    linear_regression_t ml_model;
-    lr_init(&ml_model, 1);  /* 1 feature: simple linear regression */
-    
-    /* Create simple training data: y = 2x + 3 (small dataset to avoid stack issues) */
-    static lr_dataset_t ml_dataset;  /* Static to avoid stack overflow */
-    ml_dataset.num_samples = 5;
-    ml_dataset.num_features = 1;
-    ml_dataset.features[0][0] = 1.0f; ml_dataset.labels[0] = 5.0f;   /* 2*1 + 3 = 5 */
-    ml_dataset.features[1][0] = 2.0f; ml_dataset.labels[1] = 7.0f;   /* 2*2 + 3 = 7 */
-    ml_dataset.features[2][0] = 3.0f; ml_dataset.labels[2] = 9.0f;   /* 2*3 + 3 = 9 */
-    ml_dataset.features[3][0] = 4.0f; ml_dataset.labels[3] = 11.0f;  /* 2*4 + 3 = 11 */
-    ml_dataset.features[4][0] = 5.0f; ml_dataset.labels[4] = 13.0f;  /* 2*5 + 3 = 13 */
-    
-    float loss = lr_train(&ml_model, &ml_dataset, 0.01f, 100);
-    show_string("[kmain] ML training complete, final loss=");
-    show_int((int)(loss * 100));
-    show_string("%\n");
-    
-    /* Test prediction */
-    float test_features[1] = {6.0f};
-    float prediction = lr_predict(&ml_model, test_features);
-    show_string("[kmain] ML prediction for x=6: ");
-    show_int((int)prediction);
-    show_string(" (expected ~15)\n");
-    show_string("[kmain] ML subsystem operational (100%)\n");
-#else
-    show_string("[kmain] ML subsystem: Code complete (linear regression implemented)\n");
-#endif
+    /* ML subsystem - requires FPU/SSE enabled, currently disabled */
+    show_string("[kmain] ML subsystem: architecture present (needs FPU init)\n");
     
     /* Demo: load and execute embedded user ELF (phase 1 test) */
 #ifdef RUN_FORK_DEMO

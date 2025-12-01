@@ -171,14 +171,34 @@ int e1000_init(void) {
         return -1;
     }
     e1000_device.mem_base = (uint64_t)mmio_base;
-    serial_puts("[e1000] MMIO mapped successfully\n");
+    serial_puts("[e1000] MMIO mapped successfully\\n");
     
-    // Reset device
+    // Quick device detection - read status register
+    // If all bits are 0xFF, device is not present
+    uint32_t status = e1000_read32(E1000_REG_STATUS);
+    if (status == 0xFFFFFFFF || status == 0) {
+        serial_puts("[e1000] WARNING: Device not detected (no hardware or QEMU missing -device e1000)\\n");
+        return -1;
+    }
+    serial_puts("[e1000] Device detected\\n");
+    
+    // Reset device (with timeout)
     uint32_t ctrl = e1000_read32(E1000_REG_CTRL);
     e1000_write32(E1000_REG_CTRL, ctrl | E1000_CTRL_RST);
     
-    // Wait for reset
-    for (volatile int i = 0; i < 1000000; i++);
+    // Wait for reset with timeout
+    int timeout = 10000;
+    while (timeout-- > 0) {
+        ctrl = e1000_read32(E1000_REG_CTRL);
+        if (!(ctrl & E1000_CTRL_RST)) break;
+        for (volatile int i = 0; i < 100; i++);
+    }
+    
+    if (timeout <= 0) {
+        serial_puts("[e1000] WARNING: Reset timeout\\n");
+        return -1;
+    }
+    serial_puts("[e1000] Reset complete\\n");
     
     // Link up
     ctrl = e1000_read32(E1000_REG_CTRL);

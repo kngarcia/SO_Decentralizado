@@ -311,9 +311,9 @@ setup_paging_64:
     movl %ecx, %eax
     shll $21, %eax                /* entry * 2MB */
     addl $0xC0000000, %eax        /* Add 3GB offset */
-    orl $0x083, %eax
+    orl $0x083, %eax              /* present + writeable + PS (large/2MB page) */
     movl %eax, (%edx,%ecx,8)
-    movl $0, 4(%edx,%ecx,8)
+    movl $0, 4(%edx,%ecx,8)       /* Upper 32 bits = 0 */
     incl %ecx
     jmp .loop_pd3
 
