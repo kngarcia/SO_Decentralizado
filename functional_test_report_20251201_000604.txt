@@ -1,0 +1,9 @@
+SO_DESCENTRALIZADO - Functional Test Report
+Generated: Mon Dec  1 00:06:04 -05 2025
+========================================
+
+Total tests: 42
+Passed: 30
+Failed: 12
+Success rate: 71%
+

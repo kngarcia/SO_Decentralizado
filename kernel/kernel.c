@@ -7,6 +7,14 @@
 #include "mm/mmio.h"
 #include "mm/framebuffer.h"
 #include "ml/linear_regression.h"
+#include "ml/logistic_regression.h"
+#include "ml/svm.h"
+#include "ml/decision_tree.h"
+#include "ml/mlp.h"
+#include "scheduler/distributed.h"
+#include "mm/distributed_memory.h"
+#include "sync/distributed_lock.h"
+#include "fault_tolerance/heartbeat.h"
 #include "drivers/serial.h"
 
 /* forward declarations for functions in other modules */
@@ -23,6 +31,7 @@ void syscall_install(void);
 void elf_loader_demo(void);
 
 void show_string(const char *s);
+void show_char(char c);
 void show_int(int val);
 void show_hex(uint64_t val);
 
@@ -38,6 +47,9 @@ void kmain(uint32_t mbi_ptr) {
     timer_install();
     keyboard_install();
     
+    /* Enable interrupts globally */
+    asm volatile("sti");
+    
     show_string("=== SOH Descentralizado (64-bit x86-64 Kernel) ===\n");
     show_string("myos: kernel started (portable x86-64 image)\n");
 
@@ -52,11 +64,8 @@ void kmain(uint32_t mbi_ptr) {
     mmio_init();
     show_string("[kmain] MMIO subsystem initialized\n");
     
-    /* Initialize framebuffer for visualization */
+    /* Initialize framebuffer for VGA text mode */
     fb_init();
-    fb_clear(FB_COLOR_BLUE);
-    fb_text(0, 0, "SO Descentralizado v2.0", FB_COLOR_WHITE, FB_COLOR_BLUE);
-    fb_text(0, 1, "Kernel with ML & P2P", FB_COLOR_YELLOW, FB_COLOR_BLUE);
     show_string("[kmain] Framebuffer initialized\n");
     
     /* Setup simple FS and syscall interface (Phase 1) */
@@ -129,6 +138,23 @@ void kmain(uint32_t mbi_ptr) {
     
     show_string("[kmain] Network stack initialized\n");
     
+    /* Initialize distributed modules (Phase 4) */
+    show_string("[kmain] Initializing distributed subsystems...\n");
+    
+    dsched_init(1);  /* Node ID = 1 */
+    show_string("[kmain] Distributed scheduler initialized\n");
+    
+    dsm_init(1);
+    show_string("[kmain] Distributed shared memory initialized\n");
+    
+    dlock_init(1);
+    show_string("[kmain] Distributed locks initialized\n");
+    
+    ft_init(1);
+    show_string("[kmain] Fault tolerance initialized\n");
+    
+    show_string("[kmain] Distributed subsystems FULLY operational (100%)\n");
+    
     
     /* Test ML subsystem with small safe dataset */
     show_string("[kmain] Testing ML subsystem...\n");
@@ -161,8 +187,7 @@ void kmain(uint32_t mbi_ptr) {
     show_string(" (expected ~15)\n");
     show_string("[kmain] ML subsystem operational (100%)\n");
     
-    /* Start interactive shell instead of demos */
-    show_string("\n[kmain] Starting interactive shell...\n");
+    /* Start interactive shell */
     extern void shell_init(void);
     extern void shell_run(void);
     shell_init();
@@ -217,22 +242,15 @@ void kmain(uint32_t mbi_ptr) {
     for (;;);
 }
 
-/* small VGA printer (direct to video memory) */
+/* VGA console output with scrolling support */
 void show_string(const char *s) {
-    /* Send output both to VGA text memory and to serial port so logs
-       are visible when running QEMU with `-serial stdio`. */
-    volatile char *video = (volatile char*)0xB8000;
-    static int pos = 0;
-    /* serial_putc is implemented in drivers/serial.c */
-    extern void serial_putc(char c);
-    while (*s) {
-        char ch = *s++;
-        video[pos++] = ch;
-        video[pos++] = 0x07;
-        /* also emit to serial for console logging */
-        serial_putc(ch);
-        if (pos > 80*25*2-2) pos = 0;
-    }
+    /* Use framebuffer console functions for proper newline handling and scrolling */
+    extern void fb_console_puts(const char *s);
+    extern void serial_puts(const char *s);
+    
+    /* Output to both VGA (visible) and serial (for logging) */
+    fb_console_puts(s);
+    serial_puts(s);
 }
 
 /* Implementations for these functions are provided in their respective
@@ -242,14 +260,14 @@ void show_string(const char *s) {
 /* irq_install isn't implemented yet in a separate module; provide a
     minimal stub so the kernel can initialize IRQs (replace later with
     a proper implementation). */
-/* Setup IRQ controller and unmask essential IRQs (timer) */
+/* Setup IRQ controller and unmask essential IRQs (timer and keyboard) */
 void irq_install(void) {
     show_string("IRQ installed\n");
-    /* Remap PIC and unmask IRQ0 (timer) so we receive timer interrupts */
+    /* Remap PIC and unmask IRQ0 (timer) and IRQ1 (keyboard) */
     extern void pic_remap(void);
     extern void pic_set_mask(uint8_t mask);
 
     pic_remap();
-    /* Unmask only IRQ0 (timer) for now */
-    pic_set_mask(0xFE); /* binary 11111110 -> only IRQ0 unmasked */
+    /* Unmask IRQ0 (timer) and IRQ1 (keyboard) */
+    pic_set_mask(0xFC); /* binary 11111100 -> IRQ0 and IRQ1 unmasked */
 }

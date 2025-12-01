@@ -30,6 +30,13 @@ void fb_init(void) {
     fb_current.addr = FB_VGA_TEXT_ADDR;
     fb_current.pitch = FB_VGA_TEXT_WIDTH * 2;
     
+    /* Clear the screen immediately to remove any garbage */
+    uint16_t *fb = (uint16_t *)fb_base;
+    uint16_t blank = (0x07 << 8) | ' ';  // Light gray on black, space
+    for (int i = 0; i < FB_VGA_TEXT_WIDTH * FB_VGA_TEXT_HEIGHT; i++) {
+        fb[i] = blank;
+    }
+    
     show_string("[fb] Initialized (VGA text mode 80x25, direct @ 0xB8000)\n");
 }
 
@@ -126,4 +133,151 @@ void fb_get_info(fb_info_t *info) {
     if (info) {
         *info = fb_current;
     }
+}
+
+/* VGA text console with cursor and scrolling */
+static int console_x = 0;
+static int console_y = 0;
+
+void fb_console_putchar(char c) {
+    if (!fb_base) return;
+    
+    uint16_t *fb = (uint16_t *)fb_base;
+    uint8_t attrib = 0x07;  // Light gray on black (standard VGA text color)
+    
+    if (c == '\n') {
+        console_x = 0;
+        console_y++;
+        
+        // Check for scroll immediately after newline
+        if (console_y >= FB_VGA_TEXT_HEIGHT) {
+            // Move all lines up
+            for (int y = 0; y < FB_VGA_TEXT_HEIGHT - 1; y++) {
+                for (int x = 0; x < FB_VGA_TEXT_WIDTH; x++) {
+                    int src = (y + 1) * FB_VGA_TEXT_WIDTH + x;
+                    int dst = y * FB_VGA_TEXT_WIDTH + x;
+                    fb[dst] = fb[src];
+                }
+            }
+            
+            // Clear last line
+            for (int x = 0; x < FB_VGA_TEXT_WIDTH; x++) {
+                int pos = (FB_VGA_TEXT_HEIGHT - 1) * FB_VGA_TEXT_WIDTH + x;
+                fb[pos] = (attrib << 8) | ' ';
+            }
+            
+            console_y = FB_VGA_TEXT_HEIGHT - 1;
+        }
+        fb_console_update_cursor();
+    } else if (c == '\r') {
+        console_x = 0;
+        fb_console_update_cursor();
+    } else if (c == '\b') {
+        if (console_x > 0) {
+            console_x--;
+            int pos = console_y * FB_VGA_TEXT_WIDTH + console_x;
+            fb[pos] = (attrib << 8) | ' ';
+            fb_console_update_cursor();
+        }
+    } else if (c >= 32) {  // Printable character
+        int pos = console_y * FB_VGA_TEXT_WIDTH + console_x;
+        fb[pos] = (attrib << 8) | c;
+        console_x++;
+        
+        if (console_x >= FB_VGA_TEXT_WIDTH) {
+            console_x = 0;
+            console_y++;
+            
+            // Check for scroll after line wrap
+            if (console_y >= FB_VGA_TEXT_HEIGHT) {
+                // Move all lines up
+                for (int y = 0; y < FB_VGA_TEXT_HEIGHT - 1; y++) {
+                    for (int x = 0; x < FB_VGA_TEXT_WIDTH; x++) {
+                        int src = (y + 1) * FB_VGA_TEXT_WIDTH + x;
+                        int dst = y * FB_VGA_TEXT_WIDTH + x;
+                        fb[dst] = fb[src];
+                    }
+                }
+                
+                // Clear last line
+                for (int x = 0; x < FB_VGA_TEXT_WIDTH; x++) {
+                    int pos = (FB_VGA_TEXT_HEIGHT - 1) * FB_VGA_TEXT_WIDTH + x;
+                    fb[pos] = (attrib << 8) | ' ';
+                }
+                
+                console_y = FB_VGA_TEXT_HEIGHT - 1;
+            }
+        }
+        fb_console_update_cursor();
+    }
+}
+
+void fb_console_puts(const char *s) {
+    if (!s) return;
+    while (*s) {
+        fb_console_putchar(*s++);
+    }
+}
+
+void fb_console_clear(void) {
+    if (!fb_base) return;
+    
+    /* Clear screen with proper VGA text mode format */
+    uint16_t *fb = (uint16_t *)fb_base;
+    uint16_t blank = (0x07 << 8) | ' ';  // Light gray on black, space
+    
+    /* Clear entire screen buffer */
+    for (int i = 0; i < FB_VGA_TEXT_WIDTH * FB_VGA_TEXT_HEIGHT; i++) {
+        fb[i] = blank;
+    }
+    
+    /* Reset cursor position */
+    console_x = 0;
+    console_y = 0;
+    
+    /* Update hardware cursor immediately */
+    fb_console_update_cursor();
+    
+    /* Small delay to ensure VGA hardware processes the changes */
+    for (volatile int i = 0; i < 1000; i++);
+}
+
+int fb_console_get_x(void) {
+    return console_x;
+}
+
+int fb_console_get_y(void) {
+    return console_y;
+}
+
+/* VGA hardware cursor control */
+void fb_console_update_cursor(void) {
+    uint16_t pos = console_y * FB_VGA_TEXT_WIDTH + console_x;
+    
+    /* Set cursor position using VGA CRT controller registers */
+    /* 0x3D4 = CRT Controller Address Register */
+    /* 0x3D5 = CRT Controller Data Register */
+    
+    /* Send high byte */
+    asm volatile("outb %0, $0x3D4" :: "a"((uint8_t)0x0E));
+    asm volatile("outb %0, $0x3D5" :: "a"((uint8_t)(pos >> 8)));
+    
+    /* Send low byte */
+    asm volatile("outb %0, $0x3D4" :: "a"((uint8_t)0x0F));
+    asm volatile("outb %0, $0x3D5" :: "a"((uint8_t)(pos & 0xFF)));
+}
+
+void fb_console_enable_cursor(void) {
+    /* Enable cursor with scanline 0-15 (full block cursor) */
+    asm volatile("outb %0, $0x3D4" :: "a"((uint8_t)0x0A));
+    asm volatile("outb %0, $0x3D5" :: "a"((uint8_t)0x00));  /* Cursor start line */
+    
+    asm volatile("outb %0, $0x3D4" :: "a"((uint8_t)0x0B));
+    asm volatile("outb %0, $0x3D5" :: "a"((uint8_t)0x0F));  /* Cursor end line */
+}
+
+void fb_console_disable_cursor(void) {
+    /* Disable cursor by setting bit 5 of cursor start register */
+    asm volatile("outb %0, $0x3D4" :: "a"((uint8_t)0x0A));
+    asm volatile("outb %0, $0x3D5" :: "a"((uint8_t)0x20));
 }

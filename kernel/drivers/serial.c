@@ -45,8 +45,10 @@ void serial_put_hex(uint64_t value) {
     }
 }
 
-/* show_char - display a single character to serial port */
+/* show_char - display a single character to both VGA and serial port */
 void show_char(char c) {
-    serial_putc(c);
+    extern void fb_console_putchar(char c);
+    fb_console_putchar(c);  /* Output to VGA */
+    serial_putc(c);         /* Output to serial for logging */
 }
 

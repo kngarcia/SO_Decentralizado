@@ -1,0 +1,24 @@
+SO_DESCENTRALIZADO - TEST REPORT
+=================================
+Date: Sun Nov 30 23:58:50 -05 2025
+
+RESULTS:
+  Total: 54
+  Passed: 46
+  Failed: 8
+  Success rate: 85%
+
+CODE METRICS:
+  Lines of code: 47463
+  Source files: 84
+  Kernel size: 120K
+
+FAILED TESTS:
+  - A1: 64-bit x86-64 architecture
+  - A2: Multiboot2 bootloader support
+  - B3: Virtual memory management
+  - C2: Process creation and termination
+  - C5: Preemptive multitasking scheduler
+  - C6: Context switching (register save/restore)
+  - F2: Logistic Regression algorithm
+  - G1: File descriptor table

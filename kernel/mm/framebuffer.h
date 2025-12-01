@@ -103,4 +103,14 @@ typedef struct {
 
 void fb_get_info(fb_info_t *info);
 
+/* Console functions with scrolling */
+void fb_console_putchar(char c);
+void fb_console_puts(const char *s);
+void fb_console_clear(void);
+int fb_console_get_x(void);
+int fb_console_get_y(void);
+void fb_console_update_cursor(void);
+void fb_console_enable_cursor(void);
+void fb_console_disable_cursor(void);
+
 #endif /* FRAMEBUFFER_H */
