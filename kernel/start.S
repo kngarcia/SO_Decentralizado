@@ -258,15 +258,14 @@ setup_paging_64:
     /* PD0: 0x00000000 - 0x3FFFFFFF (0-1GB) */
     leal pd0, %edx
     xor %ecx, %ecx
-    xor %esi, %esi                /* Physical address accumulator */
 .loop_pd0:
     cmpl $512, %ecx
     je .done_pd0
-    movl %esi, %eax
+    movl %ecx, %eax
+    shll $21, %eax                /* entry * 2MB */
     orl $0x083, %eax              /* present + writeable + large page */
     movl %eax, (%edx,%ecx,8)
     movl $0, 4(%edx,%ecx,8)
-    addl $0x200000, %esi          /* Next 2MB */
     incl %ecx
     jmp .loop_pd0
 
@@ -277,11 +276,12 @@ setup_paging_64:
 .loop_pd1:
     cmpl $512, %ecx
     je .done_pd1
-    movl %esi, %eax
+    movl %ecx, %eax
+    shll $21, %eax                /* entry * 2MB */
+    addl $0x40000000, %eax        /* Add 1GB offset */
     orl $0x083, %eax
     movl %eax, (%edx,%ecx,8)
     movl $0, 4(%edx,%ecx,8)
-    addl $0x200000, %esi
     incl %ecx
     jmp .loop_pd1
 
@@ -292,11 +292,12 @@ setup_paging_64:
 .loop_pd2:
     cmpl $512, %ecx
     je .done_pd2
-    movl %esi, %eax
+    movl %ecx, %eax
+    shll $21, %eax                /* entry * 2MB */
+    addl $0x80000000, %eax        /* Add 2GB offset */
     orl $0x083, %eax
     movl %eax, (%edx,%ecx,8)
     movl $0, 4(%edx,%ecx,8)
-    addl $0x200000, %esi
     incl %ecx
     jmp .loop_pd2
 
@@ -307,11 +308,12 @@ setup_paging_64:
 .loop_pd3:
     cmpl $512, %ecx
     je .done_pd3
-    movl %esi, %eax
+    movl %ecx, %eax
+    shll $21, %eax                /* entry * 2MB */
+    addl $0xC0000000, %eax        /* Add 3GB offset */
     orl $0x083, %eax
     movl %eax, (%edx,%ecx,8)
     movl $0, 4(%edx,%ecx,8)
-    addl $0x200000, %esi
     incl %ecx
     jmp .loop_pd3
 

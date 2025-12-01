@@ -69,28 +69,31 @@ void *mmio_map(uint64_t phys_addr, size_t size) {
         return NULL;
     }
     
-    /* SIMPLIFIED DIRECT MAPPING:
-     * For MMIO regions (typically > 0xC0000000), we use direct physical addressing.
-     * This works because x86-64 allows access to physical memory directly when
-     * running in kernel mode with appropriate cache attributes.
-     * We skip the complex page table mapping and use the physical address directly.
+    /* WORKAROUND: Direct physical access for MMIO
+     * Identity mapping should cover 0-4GB but there's a subtle issue with high addresses
+     * For now, use direct physical address (works if identity map is functional)
+     * TODO: Debug identity mapping for addresses above 2GB in start.S
      */
     
-    /* Record the mapping (for tracking purposes) */
-    mmio_regions[slot].virt_addr = phys_aligned;  /* Use phys addr as virt */
+    uint64_t virt_addr = phys_aligned;  /* Assume identity mapping */
+    
+    /* Record the mapping */
+    mmio_regions[slot].virt_addr = virt_addr;
     mmio_regions[slot].phys_addr = phys_aligned;
     mmio_regions[slot].size = size_aligned;
     mmio_regions[slot].used = 1;
     
     /* Debug output */
-    show_string("[mmio] Direct-mapped phys 0x");
+    show_string("[mmio] Mapped phys 0x");
     extern void show_hex(uint64_t val);
     show_hex(phys_addr);
+    show_string(" -> virt 0x");
+    show_hex(virt_addr);
     show_string(" (");
     show_hex(size);
-    show_string(" bytes, direct access)\n");
+    show_string(" bytes)\n");
     
-    return (void *)phys_addr;
+    return (void *)(virt_addr + offset);
 }
 
 void mmio_unmap(void *virt_addr, size_t size) {
